@@ -1,6 +1,7 @@
 export class CreateCompanyDto {
-  name: string;
-  cnpj: string;
-  email: string;
-  phone: string;
+  nome_empresa: string;
+  cnpj_empresa: string;
+  email_empresa: string;
+  tipo_empresa: string;
+  senha_empresa: string;
 }

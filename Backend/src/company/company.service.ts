@@ -1,25 +1,75 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Company } from './entities/company.entity';
 import { CreateCompanyDto } from './dto/create-company.dto';
 
 @Injectable()
 export class CompanyService {
-  findAll() {
-    return [];
+  constructor(
+    @InjectRepository(Company)
+    private companyRepository: Repository<Company>,
+  ) {}
+
+  async findAll(userId: number) {
+    const companies = await this.companyRepository.find({
+      where: { pk_cod_empresa: userId },
+    });
+    return {
+      status: 'success',
+      message: 'Empresas listadas com sucesso',
+      data: companies,
+    };
   }
 
-  findOne(id: number) {
-    return { id, message: 'Empresa encontrada' };
+  async findOne(id: number, userId: number) {
+    const company = await this.companyRepository.findOne({
+      where: { pk_cod_empresa: id },
+    });
+
+    if (!company) {
+      throw new NotFoundException(`Empresa com ID ${id} não encontrada`);
+    }
+
+    // Segurança: Uma empresa só pode ver seus próprios dados
+    if (company.pk_cod_empresa !== userId) {
+      throw new ForbiddenException('Você não tem permissão para acessar esta empresa');
+    }
+
+    return {
+      status: 'success',
+      message: 'Empresa encontrada',
+      data: company,
+    };
   }
 
-  create(createCompanyDto: CreateCompanyDto) {
-    return { message: 'Empresa criada', data: createCompanyDto };
+  async create(createCompanyDto: CreateCompanyDto) {
+    const company = this.companyRepository.create(createCompanyDto);
+    const saved = await this.companyRepository.save(company);
+    return {
+      status: 'success',
+      message: 'Empresa criada com sucesso',
+      data: saved,
+    };
   }
 
-  update(id: number, updateCompanyDto: Partial<CreateCompanyDto>) {
-    return { id, message: 'Empresa atualizada', data: updateCompanyDto };
+  async update(id: number, updateCompanyDto: Partial<CreateCompanyDto>, userId: number) {
+    await this.findOne(id, userId); // Já verifica existência e permissão
+    await this.companyRepository.update(id, updateCompanyDto);
+    const updated = await this.findOne(id, userId);
+    return {
+      status: 'success',
+      message: 'Empresa atualizada com sucesso',
+      data: updated.data,
+    };
   }
 
-  remove(id: number) {
-    return { id, message: 'Empresa removida' };
+  async remove(id: number, userId: number) {
+    const response = await this.findOne(id, userId);
+    await this.companyRepository.remove(response.data as Company);
+    return {
+      status: 'success',
+      message: 'Empresa removida com sucesso',
+    };
   }
 }
