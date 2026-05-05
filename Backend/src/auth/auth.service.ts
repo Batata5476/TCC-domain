@@ -1,12 +1,20 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { LoginUserDto } from './dto/login-user.dto';
 import { LoginCompanyDto } from './dto/login-company.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { RegisterCompanyDto } from './dto/register-company.dto';
+import { Company } from '../company/entities/company.entity';
 
 @Injectable()
 export class AuthService {
+  constructor(
+    @InjectRepository(Company)
+    private companyRepository: Repository<Company>,
+  ) {}
+
   loginUser(data: LoginUserDto) {
     return { message: 'Login de funcionário funcionando', data };
   }
@@ -16,17 +24,20 @@ export class AuthService {
 
     const cleanCnpj = cnpj.replace(/\D/g, '');
 
-    // 🔹 mock com hash fixo (bcrypt de '123456') para simular banco sem re-hash
-    const companyMock = {
-      cnpj: '12345678901234',
-      senha: '$2b$10$EPD/pX.Zq.2/t.3bXhGjOu7G8.Yx8BwO2T6N3C/9XG2mF4d.M5e3i',
-      nome: 'Empresa Teste',
-    };
+    const company = await this.companyRepository.findOne({
+      where: { cnpj_empresa: cleanCnpj },
+    });
 
-    if (
-      cleanCnpj !== companyMock.cnpj ||
-      !(await bcrypt.compare(senha, companyMock.senha))
-    ) {
+    if (!company) {
+      throw new UnauthorizedException('Credenciais inválidas');
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      senha,
+      company.senha_empresa,
+    );
+
+    if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
@@ -34,8 +45,10 @@ export class AuthService {
       message: 'Login realizado com sucesso',
       data: {
         company: {
-          nome: companyMock.nome,
-          cnpj: companyMock.cnpj,
+          nome_empresa: company.nome_empresa,
+          cnpj_empresa: company.cnpj_empresa,
+          email_empresa: company.email_empresa,
+          tipo_empresa: company.tipo_empresa,
         },
       },
     };
@@ -46,18 +59,28 @@ export class AuthService {
   }
 
   async registerCompany(data: RegisterCompanyDto): Promise<any> {
-    const { senha, ...rest } = data;
+    const { senha, cnpj, ...rest } = data;
 
-    // 🔐 hash da senha
+    const cleanCnpj = cnpj.replace(/\D/g, '');
+
     const hashedPassword = await bcrypt.hash(senha, 10);
 
-    // TODO: salvar no banco de dados
+    const company = this.companyRepository.create({
+      nome_empresa: rest.nome,
+      email_empresa: rest.email,
+      tipo_empresa: rest.tipo,
+      cnpj_empresa: cleanCnpj,
+      senha_empresa: hashedPassword,
+    });
+
+    await this.companyRepository.save(company);
 
     return {
       message: 'Empresa registrada com sucesso',
       data: {
         company: {
-          ...rest,
+          nome_empresa: company.nome_empresa,
+          email_empresa: company.email_empresa,
         },
       },
     };
