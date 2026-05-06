@@ -87,6 +87,8 @@ CONSTRAINT fk_tarefa FOREIGN KEY(fk_id_tarefa)
 	REFERENCES TAREFAS(pk_id_tarefas)
 );
 
+ALTER TABLE FUNC_TABLE RENAME TO FUNC_TAREFA;
+
 CREATE TABLE HIS_RECOMPENSAS(
 pk_id_resgate SERIAL PRIMARY KEY,
 data_resgate TIMESTAMPTZ NOT NULL,
@@ -256,7 +258,7 @@ SELECT
         WHEN status_tarefa = 4 THEN 'Cancelada'
     END AS status_descritivo
 FROM TAREFAS;
---Codigo 
+--Codigo para definir o que e cada número no prioridade tarefa
 SELECT
 	pK_id_tarefas,
 	CASE
@@ -264,6 +266,7 @@ SELECT
 		WHEN prioridade_tarefa = 2 THEN 'Normal'
 	END AS prioridade_descritiva
 FROM TAREFAS;
+--codigo que define o qeu e cada numero no humor_func
 
 SELECT
 	pk_id_humor,
@@ -276,16 +279,224 @@ SELECT
 	END AS humor_descritivo
 FROM HUMOR_FUNC;
 
+--views
+--views das tarefas(status e prioridade)
+CREATE VIEW vw_tarefas AS
+SELECT 
+    pk_id_tarefas,
+    validade_tarefa,
+    tipo_tarefa,
 
+    CASE 
+        WHEN prioridade_tarefa = 1 THEN 'Urgente'
+        WHEN prioridade_tarefa = 2 THEN 'Normal'
+    END AS prioridade,
 
+    CASE 
+        WHEN status_tarefa = 1 THEN 'Concluída'
+        WHEN status_tarefa = 2 THEN 'Em andamento'
+        WHEN status_tarefa = 3 THEN 'Pendente'
+        WHEN status_tarefa = 4 THEN 'Cancelada'
+    END AS status
 
+FROM TAREFAS;
 
+SELECT * FROM vw_tarefas;
 
+--views
+--views das tarefas(status e prioridade)
+CREATE VIEW vw_tarefas AS
+SELECT 
+    pk_id_tarefas,
+    validade_tarefa,
+    tipo_tarefa,
 
+    CASE 
+        WHEN prioridade_tarefa = 1 THEN 'Urgente'
+        WHEN prioridade_tarefa = 2 THEN 'Normal'
+    END AS prioridade,
 
+    CASE 
+        WHEN status_tarefa = 1 THEN 'Concluída'
+        WHEN status_tarefa = 2 THEN 'Em andamento'
+        WHEN status_tarefa = 3 THEN 'Pendente'
+        WHEN status_tarefa = 4 THEN 'Cancelada'
+    END AS status
 
+FROM TAREFAS;
 
+SELECT * FROM vw_tarefas;
 
+--view do humor_func
+CREATE VIEW vw_humor_func AS
+SELECT
+    pk_id_humor,
+    fk_id_func,
+    dth_humor,
 
+    CASE
+        WHEN humor_func = 1 THEN 'Muito ruim'
+        WHEN humor_func = 2 THEN 'Ruim'
+        WHEN humor_func = 3 THEN 'Mediano'
+        WHEN humor_func = 4 THEN 'Bom'
+        WHEN humor_func = 5 THEN 'Muito bom'
+    END AS humor
 
+FROM HUMOR_FUNC;
 
+SELECT * FROM vw_humor_func;
+
+--view do funcionario
+CREATE OR REPLACE VIEW vw_funcionario_completo AS
+SELECT
+    f.pk_id_func,
+    f.nome_func,
+    f.email_func,
+    f.pontos_acumulados,
+
+    e.nome_empresa,
+    s.nome_setor,
+    c.nome_cargo
+
+FROM INFO_FUNCIONARIO f
+
+JOIN INFO_EMPRESA e 
+    ON f.fk_cod_empresa = e.pk_cod_empresa
+
+JOIN SETOR s 
+    ON f.fk_id_setor = s.pk_id_setor
+
+JOIN CARGO c 
+    ON f.fk_id_cargo = c.pk_id_cargo;
+
+SELECT * FROM vw_funcionario_completo;
+
+-- funções
+--função para somar pontos
+CREATE OR REPLACE FUNCTION fun_somar_pontos()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Só soma pontos se mudou para concluída (representada pelo número 1)
+    IF NEW.status_tarefa = 1 AND (OLD.status_tarefa IS NULL OR OLD.status_tarefa <> 1) THEN
+        
+        UPDATE INFO_FUNCIONARIO 
+        SET pontos_acumulados = COALESCE(pontos_acumulados, 0) + 100
+        WHERE pk_id_func IN (
+            SELECT fk_id_func 
+            FROM FUNC_TAREFA 
+            WHERE fk_id_tarefa = NEW.pk_id_tarefas 
+        );
+        
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_concluir_tarefa ON TAREFAS;
+
+CREATE TRIGGER trg_concluir_tarefa
+AFTER UPDATE ON TAREFAS
+FOR EACH ROW
+EXECUTE FUNCTION fun_somar_pontos();
+
+--função para resgatar recompensa
+CREATE OR REPLACE FUNCTION fun_resgatar_recompensa(p_id_func INT, p_id_recompensa INT)
+RETURNS TEXT AS $$
+DECLARE
+    v_pontos_atuais INT;
+    v_custo_recompensa INT;
+BEGIN
+    -- Busca os pontos do funcionário
+    SELECT pontos_acumulados INTO v_pontos_atuais 
+    FROM INFO_FUNCIONARIO 
+    WHERE pk_id_func = p_id_func;
+
+    -- Busca o valor da recompensa(custo)
+    SELECT valor_recomp INTO v_custo_recompensa 
+    FROM RECOMPENSAS 
+    WHERE pk_id_recompensa = p_id_recompensa;
+
+    -- Validação de saldo
+    IF COALESCE(v_pontos_atuais, 0) < v_custo_recompensa THEN
+        RAISE EXCEPTION 
+        'Saldo insuficiente! Você possui % pontos, mas a recompensa custa %.', 
+        v_pontos_atuais, v_custo_recompensa;
+    END IF;
+
+    -- Subtrai pontos
+    UPDATE INFO_FUNCIONARIO 
+    SET pontos_acumulados = pontos_acumulados - v_custo_recompensa
+    WHERE pk_id_func = p_id_func;
+
+    -- Registra histórico
+    INSERT INTO HIS_RECOMPENSAS (data_resgate, fk_id_func, fk_id_recompensa)
+    VALUES (NOW(), p_id_func, p_id_recompensa);
+
+    RETURN 'Resgate realizado com sucesso!';
+END;
+$$ LANGUAGE plpgsql;
+
+--função para calcular a quantidade total de horas trabalhadas no dia
+CREATE OR REPLACE FUNCTION fun_calcular_total_dia()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_intervalo TIME;
+BEGIN
+    -- Busca o tempo de intervalo do funcionário
+    SELECT tempo_intervalo 
+    INTO v_intervalo
+    FROM CARGA_HORARIA
+    WHERE fk_id_func = NEW.fk_id_func;
+
+    -- Calcula total do dia
+    NEW.total_dia := (NEW.saida - NEW.entrada) - v_intervalo;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_calcular_total_dia ON ENTRADA_SAIDA;
+
+CREATE TRIGGER trg_calcular_total_dia
+BEFORE INSERT OR UPDATE ON ENTRADA_SAIDA
+FOR EACH ROW
+EXECUTE FUNCTION fun_calcular_total_dia();
+
+--função do banco de horas
+CREATE OR REPLACE FUNCTION fun_atualizar_banco_horas()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_horas_diarias TIME;
+    v_saldo_atual DECIMAL(10,2);
+    v_diferenca INTERVAL;
+BEGIN
+    -- Busca carga horária
+    SELECT horas_diarias 
+    INTO v_horas_diarias
+    FROM CARGA_HORARIA
+    WHERE fk_id_func = NEW.fk_id_func;
+
+    -- Calcula diferença
+    v_diferenca := NEW.total_dia - v_horas_diarias;
+
+    -- Tenta pegar saldo atual
+    SELECT saldo_acumulado 
+    INTO v_saldo_atual
+    FROM BANCO_HORAS
+    WHERE fk_id_func = NEW.fk_id_func;
+
+    -- Se não encontrou registro faz insert
+    IF NOT FOUND THEN
+        INSERT INTO BANCO_HORAS (saldo_acumulado, data_atualizacao, fk_id_func)
+        VALUES (EXTRACT(EPOCH FROM v_diferenca)/3600, NOW(), NEW.fk_id_func);
+    ELSE
+        UPDATE BANCO_HORAS
+        SET saldo_acumulado = saldo_acumulado + (EXTRACT(EPOCH FROM v_diferenca)/3600),
+            data_atualizacao = NOW()
+        WHERE fk_id_func = NEW.fk_id_func;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
