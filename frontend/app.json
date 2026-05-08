@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "TCC",
+    "slug": "tcc",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "tcc",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
