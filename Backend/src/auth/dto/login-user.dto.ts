@@ -1,11 +1,11 @@
-import { IsString, IsNotEmpty, Length, Matches } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 
 export class LoginUserDto {
   @IsString()
-  @Matches(/^\d{11}$/, { message: 'CPF deve conter apenas números' })
+  @IsNotEmpty()
   cpf: string;
 
   @IsString()
-  @Length(6, 20)
+  @IsNotEmpty()
   senha: string;
 }

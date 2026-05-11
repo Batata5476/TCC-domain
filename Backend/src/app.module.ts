@@ -12,6 +12,7 @@ import { MeetingsModule } from './meetings/meetings.module';
 import { OccurrencesModule } from './occurrences/occurrences.module';
 import { WorkModule } from './work/work.module';
 import { HealthModule } from './health/health.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { HealthModule } from './health/health.module';
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
         autoLoadEntities: true,
-        synchronize: true, // ⚠️ só em desenvolvimento
+        synchronize: false,
       }),
     }),
     AuthModule,
@@ -42,6 +43,7 @@ import { HealthModule } from './health/health.module';
     OccurrencesModule,
     WorkModule,
     HealthModule,
+    DashboardModule,
   ],
 })
 export class AppModule { }

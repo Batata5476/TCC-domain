@@ -1,16 +1,23 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import { useRouter } from "expo-router";
 
 type InputProps = {
   placeholder: string;
   secureTextEntry?: boolean;
+  value: string;
+  onChangeText: (text: string) => void;
+  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad";
 };
 
-function Input({ placeholder, secureTextEntry }: InputProps) {
+function Input({ placeholder, secureTextEntry, value, onChangeText, keyboardType }: InputProps) {
   return (
     <TextInput
       placeholder={placeholder}
       secureTextEntry={secureTextEntry}
+      value={value}
+      onChangeText={onChangeText}
+      keyboardType={keyboardType}
       style={styles.input}
     />
   );
@@ -19,18 +26,61 @@ function Input({ placeholder, secureTextEntry }: InputProps) {
 export default function CadastroFuncionario() {
   const router = useRouter();
 
+  const [nome, setNome] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [email, setEmail] = useState("");
+  const [setor, setSetor] = useState("");
+  const [cargo, setCargo] = useState("");
+  const [codEmpresa, setCodEmpresa] = useState("");
+
+  const handleRegister = async () => {
+    if (!nome || !cpf || !email || !setor || !cargo || !codEmpresa) {
+      Alert.alert("Erro", "Por favor, preencha todos os campos.");
+      return;
+    }
+
+    try {
+      const response = await fetch("http://192.168.0.103:3000/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nome_func: nome,
+          cpf_func: Number(cpf),
+          email_func: email,
+          fk_id_setor: Number(setor), // Usando números por enquanto, simulando IDs
+          fk_id_cargo: Number(cargo),
+          fk_cod_empresa: Number(codEmpresa),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        Alert.alert("Sucesso", "Funcionário cadastrado com sucesso!");
+        router.push("/loginFuncionario");
+      } else {
+        Alert.alert("Erro", data.message || "Falha ao cadastrar funcionário.");
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erro", "Não foi possível conectar ao servidor.");
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Cadastro Funcionário</Text>
 
-      <Input placeholder="Nome Completo" />
-      <Input placeholder="CPF" />
-      <Input placeholder="Setor" />
-      <Input placeholder="Cargo" />
-      <Input placeholder="Código da empresa" />
-      <Input placeholder="Confirmar código da empresa" />
+      <Input placeholder="Nome Completo" value={nome} onChangeText={setNome} />
+      <Input placeholder="CPF" value={cpf} onChangeText={setCpf} keyboardType="numeric" />
+      <Input placeholder="E-mail" value={email} onChangeText={setEmail} keyboardType="email-address" />
+      <Input placeholder="ID do Setor (Número)" value={setor} onChangeText={setSetor} keyboardType="numeric" />
+      <Input placeholder="ID do Cargo (Número)" value={cargo} onChangeText={setCargo} keyboardType="numeric" />
+      <Input placeholder="Código da Empresa" value={codEmpresa} onChangeText={setCodEmpresa} keyboardType="numeric" />
 
-      <TouchableOpacity style={styles.button}>
+      <TouchableOpacity style={styles.button} onPress={handleRegister}>
         <Text style={styles.buttonText}>Cadastrar</Text>
       </TouchableOpacity>
 

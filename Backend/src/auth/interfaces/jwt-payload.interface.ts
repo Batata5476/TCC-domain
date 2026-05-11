@@ -1,4 +1,8 @@
+export type JwtSubjectType = 'company' | 'user';
+
 export interface JwtPayload {
   sub: number;
-  cnpj: string;
+  type?: JwtSubjectType;
+  cnpj?: string;
+  cpf?: string;
 }

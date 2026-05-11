@@ -4,15 +4,16 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('company')
-@UseGuards(JwtAuthGuard)
 export class CompanyController {
   constructor(private readonly companyService: CompanyService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Get()
   findAll(@Request() req) {
     return this.companyService.findAll(req.user.userId);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req) {
     return this.companyService.findOne(+id, req.user.userId);
@@ -23,11 +24,13 @@ export class CompanyController {
     return this.companyService.create(createCompanyDto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateCompanyDto: Partial<CreateCompanyDto>, @Request() req) {
     return this.companyService.update(+id, updateCompanyDto, req.user.userId);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req) {
     return this.companyService.remove(+id, req.user.userId);

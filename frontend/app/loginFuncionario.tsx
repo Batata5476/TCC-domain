@@ -1,16 +1,22 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
+import { loginEmployee } from "../services/auth";
 
 type InputProps = {
   placeholder: string;
   secureTextEntry?: boolean;
+  value: string;
+  onChangeText: (text: string) => void;
 };
 
-function Input({ placeholder, secureTextEntry }: InputProps) {
+function Input({ placeholder, secureTextEntry, value, onChangeText }: InputProps) {
   return (
     <TextInput
       placeholder={placeholder}
       secureTextEntry={secureTextEntry}
+      value={value}
+      onChangeText={onChangeText}
       style={styles.input}
     />
   );
@@ -18,16 +24,32 @@ function Input({ placeholder, secureTextEntry }: InputProps) {
 
 export default function LoginFuncionario() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+
+  const handleLogin = async () => {
+    if (!email || !senha) {
+      Alert.alert("Erro", "Por favor, preencha todos os campos.");
+      return;
+    }
+
+    try {
+      const response = await loginEmployee(email, senha);
+      Alert.alert("Sucesso", "Login realizado com sucesso!");
+      router.push("/dashboard");
+    } catch (error: any) {
+      Alert.alert("Erro", error.message || "Falha ao realizar login.");
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Olá! Seja bem vindo(a) de volta</Text>
 
-      <Input placeholder="Nome Completo" />
-      <Input placeholder="CPF" />
-      <Input placeholder="Senha" secureTextEntry />
+      <Input placeholder="E-mail" value={email} onChangeText={setEmail} />
+      <Input placeholder="Senha" secureTextEntry value={senha} onChangeText={setSenha} />
 
-      <TouchableOpacity style={styles.button}>
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Entrar</Text>
       </TouchableOpacity>
 

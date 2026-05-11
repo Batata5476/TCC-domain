@@ -1,17 +1,22 @@
-import React from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
+import { loginCompany } from "../services/auth";
 
 type InputProps = {
   placeholder: string;
   secureTextEntry?: boolean;
+  value: string;
+  onChangeText: (text: string) => void;
 };
 
-function Input({ placeholder, secureTextEntry }: InputProps) {
+function Input({ placeholder, secureTextEntry, value, onChangeText }: InputProps) {
   return (
     <TextInput
       placeholder={placeholder}
       secureTextEntry={secureTextEntry}
+      value={value}
+      onChangeText={onChangeText}
       style={styles.input}
     />
   );
@@ -19,15 +24,32 @@ function Input({ placeholder, secureTextEntry }: InputProps) {
 
 export default function LoginEmpresa() {
   const router = useRouter();
+  const [cnpj, setCnpj] = useState("");
+  const [senha, setSenha] = useState("");
+
+  const handleLogin = async () => {
+    if (!cnpj || !senha) {
+      Alert.alert("Erro", "Por favor, preencha todos os campos.");
+      return;
+    }
+
+    try {
+      const response = await loginCompany(cnpj, senha);
+      Alert.alert("Sucesso", "Login realizado com sucesso!");
+      router.push("/dashboard");
+    } catch (error: any) {
+      Alert.alert("Erro", error.message || "Falha ao realizar login.");
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Olá! Seja bem vindo(a) de volta</Text>
 
-      <Input placeholder="CNPJ" />
-      <Input placeholder="Código da empresa" />
+      <Input placeholder="CNPJ" value={cnpj} onChangeText={setCnpj} />
+      <Input placeholder="Senha (Código)" secureTextEntry value={senha} onChangeText={setSenha} />
 
-      <TouchableOpacity style={styles.button}>
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Entrar</Text>
       </TouchableOpacity>
 
@@ -35,9 +57,7 @@ export default function LoginEmpresa() {
         style={styles.secondaryButton}
         onPress={() => router.push("/cadastroEmpresa")}
       >
-        <Text style={styles.secondaryButtonText}>
-          Não tenho conta
-        </Text>
+        <Text style={styles.secondaryButtonText}>Não tenho conta</Text>
       </TouchableOpacity>
     </View>
   );

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { Company } from './entities/company.entity';
 import { CreateCompanyDto } from './dto/create-company.dto';
 
@@ -44,7 +45,13 @@ export class CompanyService {
   }
 
   async create(createCompanyDto: CreateCompanyDto) {
-    const company = this.companyRepository.create(createCompanyDto);
+    const { senha_empresa, ...rest } = createCompanyDto;
+    const hashedPassword = await bcrypt.hash(senha_empresa, 10);
+    
+    const company = this.companyRepository.create({
+      ...rest,
+      senha_empresa: hashedPassword,
+    });
     const saved = await this.companyRepository.save(company);
     return {
       status: 'success',

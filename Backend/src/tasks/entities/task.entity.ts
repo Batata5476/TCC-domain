@@ -1,11 +1,19 @@
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+
+@Entity('tarefas')
 export class Task {
-  id: number;
-  title: string;
-  description: string;
-  status: string;
-  priority: string;
-  assignedToId: number;
-  companyId: number;
-  dueDate: Date;
-  createdAt: Date;
+  @PrimaryGeneratedColumn()
+  pk_id_tarefas: number;
+
+  @Column({ type: 'date' })
+  validade_tarefa: Date;
+
+  @Column({ length: 30 })
+  tipo_tarefa: string;
+
+  @Column()
+  prioridade_tarefa: number;
+
+  @Column()
+  status_tarefa: number;
 }
