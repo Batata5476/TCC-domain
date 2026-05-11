@@ -1,9 +1,9 @@
 --inserindo dados de teste
 --Empresas
-INSERT INTO INFO_EMPRESA(cnpj_empresa, nome_empresa, email_empresa, tipo_empresa)
+INSERT INTO INFO_EMPRESA(cnpj_empresa, nome_empresa, email_empresa, tipo_empresa, senha_empresa)
 VALUES
-	('12.345.678/0001-90','TechNova Soluções','contato@technova.com','Tecnologia'),
-	('98.765.432/0001-21','Café Aroma Ltda','rh@cafearoma.com.br','Alimentos e Bebidas');
+	('99888777000100','Empresa Teste','admin@teste.com','Serviços', '$2b$10$pmlLu/WwkrAYupISxCI/0ucWdK.7OSvKHTKLEU/B8b9dz5c6y.6k.'),
+	('12345678000190','TechNova Soluções','contato@technova.com','Tecnologia', '$2b$10$pmlLu/WwkrAYupISxCI/0ucWdK.7OSvKHTKLEU/B8b9dz5c6y.6k.');
 
 SELECT * FROM INFO_EMPRESA;
 
@@ -28,10 +28,10 @@ SELECT * FROM CARGO;
 
 --funcionarios
 INSERT INTO INFO_FUNCIONARIO
-(nome_func, email_func, cpf_func, pontos_acumulados, fk_cod_empresa, fk_id_setor, fk_id_cargo)
+(nome_func, email_func, cpf_func, senha_func, pontos_acumulados, fk_cod_empresa, fk_id_setor, fk_id_cargo)
 VALUES
-('Ana Silva', 'ana@technova.com', '3763483472423', 0, 1, 1, 1),
-('Bruno Costa', 'bruno@technova.com', '8734234236754', 0, 1, 2, 2);
+('Funcionario Teste', 'func@teste.com', '12345678900', '$2b$10$pmlLu/WwkrAYupISxCI/0ucWdK.7OSvKHTKLEU/B8b9dz5c6y.6k.', 0, 1, 1, 1),
+('Ana Silva', 'ana@technova.com', '3763483472423', '$2b$10$pmlLu/WwkrAYupISxCI/0ucWdK.7OSvKHTKLEU/B8b9dz5c6y.6k.', 0, 1, 1, 1);
 
 SELECT * FROM vw_funcionario_completo;--view
 

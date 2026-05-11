@@ -42,8 +42,8 @@ export async function loginEmployee(email: string, senha_func: string) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email,
-        senha_func,
+        cpf: email, // O campo no formulário ainda se chama email, mas passamos como cpf
+        senha: senha_func,
       }),
     });
   

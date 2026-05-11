@@ -5,7 +5,8 @@ pk_cod_empresa SERIAL PRIMARY KEY,--Serial gera números automaticos(autoincreme
 cnpj_empresa VARCHAR(18) UNIQUE NOT NULL,
 nome_empresa VARCHAR(50) NOT NULL,
 email_empresa VARCHAR(50) NOT NULL,
-tipo_empresa VARCHAR(50) NOT NULL
+tipo_empresa VARCHAR(50) NOT NULL,
+senha_empresa VARCHAR(255)
 )
 
 CREATE TABLE SETOR(
@@ -53,6 +54,7 @@ pk_id_func SERIAL PRIMARY KEY,
 nome_func VARCHAR(50) NOT NULL,
 cpf_func NUMERIC(14) UNIQUE NOT NULL,
 email_func VARCHAR(50) NOT NULL,
+senha_func VARCHAR(255),
 pontos_acumulados INT, --começa em 0 e aumenta conforme o funcionario ganha pontos e diminui conforme ele resgata as recompensas
 foto_func VARCHAR(100), --Armazena a URL ou o caminho do diretório onde a foto de perfil do funcionário está localizada
 --chaves fk

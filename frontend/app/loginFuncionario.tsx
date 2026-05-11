@@ -24,17 +24,17 @@ function Input({ placeholder, secureTextEntry, value, onChangeText }: InputProps
 
 export default function LoginFuncionario() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
 
   const handleLogin = async () => {
-    if (!email || !senha) {
+    if (!cpf || !senha) {
       Alert.alert("Erro", "Por favor, preencha todos os campos.");
       return;
     }
 
     try {
-      const response = await loginEmployee(email, senha);
+      const response = await loginEmployee(cpf, senha);
       Alert.alert("Sucesso", "Login realizado com sucesso!");
       router.push("/dashboard");
     } catch (error: any) {
@@ -46,7 +46,7 @@ export default function LoginFuncionario() {
     <View style={styles.container}>
       <Text style={styles.title}>Olá! Seja bem vindo(a) de volta</Text>
 
-      <Input placeholder="E-mail" value={email} onChangeText={setEmail} />
+      <Input placeholder="CPF" value={cpf} onChangeText={setCpf} />
       <Input placeholder="Senha" secureTextEntry value={senha} onChangeText={setSenha} />
 
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
