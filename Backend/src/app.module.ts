@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'; // Import ThrottlerModule and ThrottlerGuard for rate limiting
+import { APP_GUARD } from '@nestjs/core'; // Import APP_GUARD to apply the ThrottlerGuard globally
 
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -16,9 +18,22 @@ import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
+    // Load environment variables from .env and make ConfigService available globally
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+
+    // Global rate limit: 30 requests per minute per IP address
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000, // 1 minute
+          limit: 30, // Maximum of 30 requests in this period
+        },
+      ],
+    }),
+
+    // Database configuration using environment variables
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -33,6 +48,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
         synchronize: false,
       }),
     }),
+
+    // Application modules
     AuthModule,
     UsersModule,
     CompanyModule,
@@ -45,5 +62,13 @@ import { DashboardModule } from './dashboard/dashboard.module';
     HealthModule,
     DashboardModule,
   ],
+
+  // Apply the ThrottlerGuard globally to all routes
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
-export class AppModule { }
+export class AppModule {}
