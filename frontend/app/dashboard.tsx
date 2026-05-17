@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Pressable,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { logout, getToken } from "../services/auth";
@@ -123,44 +124,44 @@ export default function Dashboard() {
         </View>
       ) : (
         <View style={[styles.cardsWrap, cardRowStyle]}>
-          <View style={[styles.card, isWide && styles.cardThird]}>
-            <Text style={styles.cardEmoji}>👥</Text>
+          <Pressable style={({ hovered }: any) => [styles.card, isWide && styles.cardThird, hovered && styles.cardHover]}>
+            <View style={[styles.cardAccent, { backgroundColor: '#285A71' }]} />
             <Text style={styles.cardTitle}>Funcionários</Text>
             <Text style={styles.metric}>
               {dashboard?.totalFuncionarios ?? "—"}
             </Text>
             <Text style={styles.cardFoot}>Cadastrados na empresa</Text>
-          </View>
+          </Pressable>
 
-          <View style={[styles.card, isWide && styles.cardThird]}>
-            <Text style={styles.cardEmoji}>📋</Text>
+          <Pressable style={({ hovered }: any) => [styles.card, isWide && styles.cardThird, hovered && styles.cardHover]}>
+            <View style={[styles.cardAccent, { backgroundColor: '#5E8A94' }]} />
             <Text style={styles.cardTitle}>Total Tarefas</Text>
             <Text style={styles.metric}>
               {dashboard?.totalTarefas ?? "—"}
             </Text>
             <Text style={styles.cardFoot}>Volume total de trabalho</Text>
-          </View>
+          </Pressable>
 
-          <View style={[styles.card, isWide && styles.cardThird]}>
-            <Text style={styles.cardEmoji}>⏳</Text>
+          <Pressable style={({ hovered }: any) => [styles.card, isWide && styles.cardThird, hovered && styles.cardHover]}>
+            <View style={[styles.cardAccent, { backgroundColor: '#D32F2F' }]} />
             <Text style={styles.cardTitle}>Pendentes</Text>
             <Text style={[styles.metric, { color: '#D32F2F' }]}>
               {dashboard?.tarefasPendentes ?? "—"}
             </Text>
             <Text style={styles.cardFoot}>Aguardando início ou em atraso</Text>
-          </View>
+          </Pressable>
 
-          <View style={[styles.card, isWide && styles.cardThird]}>
-            <Text style={styles.cardEmoji}>✅</Text>
+          <Pressable style={({ hovered }: any) => [styles.card, isWide && styles.cardThird, hovered && styles.cardHover]}>
+            <View style={[styles.cardAccent, { backgroundColor: '#388E3C' }]} />
             <Text style={styles.cardTitle}>Concluídas</Text>
             <Text style={[styles.metric, { color: '#388E3C' }]}>
               {dashboard?.tarefasConcluidas ?? "—"}
             </Text>
             <Text style={styles.cardFoot}>Produtividade confirmada</Text>
-          </View>
+          </Pressable>
 
-          <View style={[styles.card, isWide && styles.cardThird]}>
-            <Text style={styles.cardEmoji}>😊</Text>
+          <Pressable style={({ hovered }: any) => [styles.card, isWide && styles.cardThird, hovered && styles.cardHover]}>
+            <View style={[styles.cardAccent, { backgroundColor: getHumorColor(dashboard?.humor.media || "0") }]} />
             <Text style={styles.cardTitle}>Humor Médio</Text>
             <Text style={[styles.metric, { color: getHumorColor(dashboard?.humor.media || "0") }]}>
               {dashboard?.humor.media ?? "—"}
@@ -168,10 +169,10 @@ export default function Dashboard() {
             <Text style={styles.cardFoot}>
               Média de bem-estar ({dashboard?.humor.totalRegistros || 0} envios)
             </Text>
-          </View>
+          </Pressable>
 
-          <View style={[styles.card, isWide && styles.cardThird]}>
-            <Text style={styles.cardEmoji}>📊</Text>
+          <Pressable style={({ hovered }: any) => [styles.card, isWide && styles.cardThird, hovered && styles.cardHover]}>
+            <View style={[styles.cardAccent, { backgroundColor: parseFloat(dashboard?.humor.media || "0") >= 3.5 ? "#388E3C" : "#FBC02D" }]} />
             <Text style={styles.cardTitle}>Status Emocional</Text>
             <Text style={[styles.metric, styles.metricMuted]}>
               {parseFloat(dashboard?.humor.media || "0") >= 3.5 ? "Positivo" : "Atenção"}
@@ -179,7 +180,7 @@ export default function Dashboard() {
             <Text style={styles.cardFoot}>
               Análise baseada nos últimos registros
             </Text>
-          </View>
+          </Pressable>
         </View>
       )}
 
@@ -261,19 +262,33 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     shadowColor: "#285A71",
-    shadowOpacity: Platform.OS === "web" ? 0.06 : 0.14,
-    shadowRadius: 12,
+    shadowOpacity: Platform.OS === "web" ? 0.04 : 0.1,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
     borderWidth: 1,
-    borderColor: "rgba(40,90,113,0.08)",
-    minHeight: 160,
+    borderColor: "rgba(40,90,113,0.05)",
+    minHeight: 140,
     flexGrow: 1,
+    position: 'relative',
+    overflow: 'hidden',
   },
   cardThird: {
     flexBasis: "31%",
     flexGrow: 1,
     minWidth: 200,
+  },
+  cardHover: {
+    transform: [{ translateY: -4 }],
+    shadowOpacity: 0.1,
+    borderColor: "rgba(40,90,113,0.15)",
+  },
+  cardAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
   },
   cardEmoji: {
     fontSize: 28,

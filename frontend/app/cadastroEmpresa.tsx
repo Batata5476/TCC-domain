@@ -43,7 +43,7 @@ export default function CadastroEmpresa() {
     }
 
     try {
-      const response = await fetch("http://192.168.0.103:3000/company", {
+      const response = await fetch("http://localhost:3000/company", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,6 +1,6 @@
 import { getToken } from './auth';
 
-const API_URL = 'http://192.168.0.103:3000';
+const API_URL = 'http://localhost:3000';
 
 export async function authenticatedFetch(endpoint: string, options: RequestInit = {}) {
   const token = await getToken();

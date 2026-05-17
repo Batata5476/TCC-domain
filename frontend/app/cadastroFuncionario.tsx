@@ -32,6 +32,7 @@ export default function CadastroFuncionario() {
   const [setor, setSetor] = useState("");
   const [cargo, setCargo] = useState("");
   const [codEmpresa, setCodEmpresa] = useState("");
+  const [senha, setSenha] = useState("");
 
   const handleRegister = async () => {
     if (!nome || !cpf || !email || !setor || !cargo || !codEmpresa) {
@@ -40,16 +41,17 @@ export default function CadastroFuncionario() {
     }
 
     try {
-      const response = await fetch("http://192.168.0.103:3000/users", {
+      const response = await fetch("http://localhost:3000/users", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           nome_func: nome,
-          cpf_func: Number(cpf),
+          cpf_func: cpf,
           email_func: email,
-          fk_id_setor: Number(setor), // Usando números por enquanto, simulando IDs
+          senha_func: senha,
+          fk_id_setor: Number(setor),
           fk_id_cargo: Number(cargo),
           fk_cod_empresa: Number(codEmpresa),
         }),
@@ -79,6 +81,7 @@ export default function CadastroFuncionario() {
       <Input placeholder="ID do Setor (Número)" value={setor} onChangeText={setSetor} keyboardType="numeric" />
       <Input placeholder="ID do Cargo (Número)" value={cargo} onChangeText={setCargo} keyboardType="numeric" />
       <Input placeholder="Código da Empresa" value={codEmpresa} onChangeText={setCodEmpresa} keyboardType="numeric" />
+      <Input placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry={true} />
 
       <TouchableOpacity style={styles.button} onPress={handleRegister}>
         <Text style={styles.buttonText}>Cadastrar</Text>

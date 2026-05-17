@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const API_URL = 'http://192.168.0.103:3000';
+const API_URL = 'http://localhost:3000';
 
 export async function loginCompany(cnpj: string, senha_empresa: string) {
   const response = await fetch(`${API_URL}/auth/company/login`, {
