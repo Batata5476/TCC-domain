@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
   dropupMenu: {
     position: "absolute",
     right: 24,
-    bottom: 172,
+    bottom: 200,
     alignItems: "flex-end",
   },
 
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   floatingButton: {
     position: "absolute",
     right: 24,
-    bottom: 95,
+    bottom: 115,
     width: 68,
     height: 68,
     borderRadius: 34,
@@ -520,6 +520,7 @@ const styles = StyleSheet.create({
     shadowColor: "#285A71",
     shadowOpacity: 0.25,
     shadowRadius: 12,
+    marginBottom: 10,
     shadowOffset: {
       width: 0,
       height: 6,
@@ -529,6 +530,7 @@ const styles = StyleSheet.create({
 
   floatingButtonActive: {
     backgroundColor: "#1E4253",
+
   },
 
   bottomNavigation: {
