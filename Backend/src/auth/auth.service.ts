@@ -5,8 +5,6 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { LoginUserDto } from './dto/login-user.dto';
 import { LoginCompanyDto } from './dto/login-company.dto';
-import { RegisterUserDto } from './dto/register-user.dto';
-import { RegisterCompanyDto } from './dto/register-company.dto';
 import { Company } from '../company/entities/company.entity';
 import { User } from '../users/entities/user.entity';
 
@@ -98,43 +96,6 @@ export class AuthService {
       message: 'Login realizado com sucesso',
       data: {
         access_token: token,
-      },
-    };
-  }
-
-  registerUser(data: RegisterUserDto) {
-    return {
-      status: 'success',
-      message: 'Registro de funcionário funcionando',
-      data,
-    };
-  }
-
-  async registerCompany(data: RegisterCompanyDto) {
-    const { senha, cnpj, ...rest } = data;
-
-    const cleanCnpj = cnpj.replace(/\D/g, '');
-
-    const hashedPassword = await bcrypt.hash(senha, 10);
-
-    const company = this.companyRepository.create({
-      nome_empresa: (rest as any).nome,
-      email_empresa: (rest as any).email,
-      tipo_empresa: (rest as any).tipo,
-      cnpj_empresa: cleanCnpj,
-      senha_empresa: hashedPassword,
-    });
-
-    await this.companyRepository.save(company);
-
-    return {
-      status: 'success',
-      message: 'Empresa registrada com sucesso',
-      data: {
-        company: {
-          nome_empresa: company.nome_empresa,
-          email_empresa: company.email_empresa,
-        },
       },
     };
   }

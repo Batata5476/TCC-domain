@@ -1,6 +1,6 @@
 # Status do Projeto - TCC Coopera
 
-> **Última atualização:** 10/05/2026 — Sessão de autenticação completa implementada e validada.
+> **Última atualização:** 25/05/2026 — Chat demonstrativo e navegação integrada concluídos.
 
 ---
 
@@ -37,14 +37,21 @@
 - Tela com CNPJ e Senha conectados ao `loginCompany()` do `services/auth.ts`.
 - Ao logar, recebe o Token JWT e redireciona para o Dashboard.
 
-#### 2.5 Login de Funcionário (Implementado ✅)
-- Tela com E-mail e Senha conectados ao `loginEmployee()`.
-- Preparado para quando o backend implementar a rota `POST /auth/user/login`.
+#### 2.5 Login de Funcionário (Funcional ✅)
+- Tela com CPF e Senha conectados ao `loginEmployee()`.
+- Totalmente integrado e funcional com a rota real `POST /auth/user/login` do backend NestJS.
 
 #### 2.6 Dashboard (Funcional ✅)
 - Verifica se há token válido ao carregar.
 - Faz chamada autenticada para `/company` e exibe "Sessão Autenticada ✅".
 - Botão de Logout remove o token e redireciona para a tela inicial.
+
+#### 2.7 Chat & Comunicação (Demonstrativo ✅)
+- Criada a tela de chat interativa em `frontend/app/chat.tsx` seguindo o padrão visual do Coopera.
+- Contém listagem de conversas e lista de contatos corporativos.
+- Filtro local em tempo real no campo de busca.
+- Conversa ativa totalmente interativa: permite digitar, enviar mensagens e receber auto-respostas dinâmicas simuladas após 1.5 segundos.
+- Barra de navegação inferior integrada para alternância instantânea entre a central (dashboard) e chats.
 
 **Dashboard Autenticado:**
 ![Dashboard](file:///C:/Users/Amadeu_Turolla/.gemini/antigravity/brain/4fa928ed-130e-4370-a4ae-b707bfe805e2/dashboard_full_view_1778447537272.png)
@@ -84,6 +91,7 @@
 
 #### 3.4 Autenticação (JWT)
 - `loginCompany` no `AuthService` busca empresa pelo CNPJ, compara senha com `bcrypt.compare`, e emite o JWT.
+- `loginUser` no `AuthService` busca funcionário pelo CPF, compara senha com `bcrypt.compare`, e emite o JWT.
 - `JwtStrategy` valida o token nas rotas protegidas.
 
 ---
@@ -100,29 +108,25 @@
 ---
 
 ## 🚩 O que ainda falta fazer
+ 
+- [x] **Dashboard Real** (Concluído)
+- [x] **Mapeamento de Tarefas e Associação** (Concluído)
+- [x] **Tela de Chat Demonstrativa** (Concluído)
 
-### 1. Backend — Login de Funcionário
-- O `AuthService.loginUser()` retorna apenas uma mensagem mockada.
-- Precisa ser implementado com `bcrypt.compare` e emissão de JWT, similar ao `loginCompany`.
-
-### 2. Tratamento de Erros
+### 1. Tratamento de Erros
 - O backend retorna **HTTP 500** em caso de CNPJ ou CPF duplicado.
 - Deve retornar **HTTP 409 (Conflict)** com mensagem amigável.
 
-### 3. Dashboard Real
-- O Dashboard atual é apenas uma tela de validação de sessão.
-- Precisa ser expandido com listagem de tarefas, informações do usuário, etc.
-
-### 4. Mapeamento de Entidades Restantes
+### 2. Mapeamento de Entidades Restantes
 | Tabela | Status |
 |---|---|
-| `TAREFAS` / `FUNC_TAREFA` | ❌ Pendente |
-| `HUMOR_FUNC` | ❌ Pendente |
-| `CHATS` / `MENSAGENS` / `MIDIA` | ❌ Pendente |
+| `TAREFAS` / `FUNC_TAREFA` | ✅ Concluído e Mapeado |
+| `HUMOR_FUNC` | ✅ Mapeado (`Humor` mapeia humor_func) |
+| `CHATS` / `MENSAGENS` / `MIDIA` | 🚧 Tela de chat pronta (front), persistência/tempo-real pendentes |
 | `ENTRADA_SAIDA` / `CARGA_HORARIA` / `BANCO_HORAS` | ❌ Pendente |
 | `REUNIAO` / `PARTICIPANTES_REU` | ❌ Pendente |
 
-### 5. Validações de Formulário
+### 3. Validações de Formulário
 - Máscaras para CNPJ e CPF.
 - Validação de formato de e-mail em tempo real.
 - Feedback visual durante o carregamento (loading spinner).

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import { useRouter } from "expo-router";
+import { API_URL } from "../services/config";
 
 type InputProps = {
   placeholder: string;
@@ -41,7 +42,7 @@ export default function CadastroFuncionario() {
     }
 
     try {
-      const response = await fetch("http://localhost:3000/users", {
+      const response = await fetch(`${API_URL}/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

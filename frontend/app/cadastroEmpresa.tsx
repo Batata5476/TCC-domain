@@ -1,6 +1,7 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import React, { useState } from "react";
 import { useRouter } from "expo-router";
+import { API_URL } from "../services/config";
 
 
 type InputProps = {
@@ -43,7 +44,7 @@ export default function CadastroEmpresa() {
     }
 
     try {
-      const response = await fetch("http://localhost:3000/company", {
+      const response = await fetch(`${API_URL}/company`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

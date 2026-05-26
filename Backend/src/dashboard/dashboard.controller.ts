@@ -12,4 +12,10 @@ export class DashboardController {
     // O id da empresa está no sub do token (PK_COD_EMPRESA)
     return this.dashboardService.getCompanyDashboard(req.user.userId);
   }
+
+  @Get('user')
+  async getUserDashboard(@Req() req) {
+    // O id do funcionário está no sub do token (PK_ID_FUNC)
+    return this.dashboardService.getUserDashboard(req.user.userId);
+  }
 }

@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const API_URL = 'http://localhost:3000';
+import { API_URL } from './config';
 
 export async function loginCompany(cnpj: string, senha_empresa: string) {
   const response = await fetch(`${API_URL}/auth/company/login`, {
@@ -33,16 +33,14 @@ export async function loginCompany(cnpj: string, senha_empresa: string) {
   return data;
 }
 
-export async function loginEmployee(email: string, senha_func: string) {
-    // Implementação similar para funcionário se o backend tiver a rota
-    // Atualmente estamos focando em empresa conforme o guia
+export async function loginEmployee(cpf: string, senha_func: string) {
     const response = await fetch(`${API_URL}/auth/user/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        cpf: email, // O campo no formulário ainda se chama email, mas passamos como cpf
+        cpf: cpf.replace(/\D/g, ''),
         senha: senha_func,
       }),
     });
