@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards } from '@nestjs/common';
 import { OccurrencesService } from './occurrences.service';
 import { CreateOccurrenceDto } from './dto/create-occurrence.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+// Todas as rotas exigem um token JWT valido para acesso.
+@UseGuards(JwtAuthGuard)
 @Controller('occurrences')
 export class OccurrencesController {
   constructor(private readonly occurrencesService: OccurrencesService) {}

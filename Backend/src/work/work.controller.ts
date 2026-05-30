@@ -1,7 +1,11 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards } from '@nestjs/common';
 import { WorkService } from './work.service';
 import { CreateWorkDto } from './dto/create-work.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+
+// todas as rotas exigem um token JWT válido para acesso
+@UseGuards(JwtAuthGuard)
 @Controller('work')
 export class WorkController {
   constructor(private readonly workService: WorkService) {}

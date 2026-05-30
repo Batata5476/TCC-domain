@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards } from '@nestjs/common';
 import { WellbeingService } from './wellbeing.service';
 import { CreateWellbeingDto } from './dto/create-wellbeing.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+// todas as rotas exigem um token JWT válido para acesso
+@UseGuards(JwtAuthGuard)
 @Controller('wellbeing')
 export class WellbeingController {
   constructor(private readonly wellbeingService: WellbeingService) {}
