@@ -1,11 +1,16 @@
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+
+@Entity('his_medico')
 export class Occurrence {
-  id: number;
-  title: string;
-  description: string;
-  type: string;
-  severity: string;
-  reportedById: number;
-  companyId: number;
-  occurredAt: Date;
-  createdAt: Date;
+  @PrimaryGeneratedColumn()
+  pk_id_his_medico: number;
+
+  @Column({ nullable: true })
+  atestado_func: string;
+
+  @Column({ length: 50, nullable: true })
+  ocorrencias: string;
+
+  @Column()
+  fk_id_func: number;
 }

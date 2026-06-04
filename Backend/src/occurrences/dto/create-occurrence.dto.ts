@@ -1,9 +1,12 @@
+import { IsString, IsOptional, Length } from 'class-validator';
+
 export class CreateOccurrenceDto {
-  title: string;
-  description: string;
-  type: string;
-  severity: string;
-  reportedById: number;
-  companyId: number;
-  occurredAt: Date;
+  @IsOptional()
+  @IsString()
+  atestado_func?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 50)
+  ocorrencias?: string;
 }

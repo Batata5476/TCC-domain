@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
@@ -16,13 +16,68 @@ export class TasksService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  async create(data: {
-    tipo_tarefa: string;
-    validade_tarefa: Date;
-    prioridade_tarefa: number;
-    fk_id_func: number;
-    fk_cod_empresa: number;
-  }) {
+  private async validateTaskAccess(taskId: number, caller: any): Promise<FuncTarefa> {
+    const callerId = caller.userId || caller.sub;
+
+    const relations = await this.funcTarefaRepository.find({
+      where: { fk_id_tarefa: taskId },
+    });
+
+    if (relations.length === 0) {
+      throw new NotFoundException('Tarefa não encontrada');
+    }
+
+    if (caller.type === 'user') {
+      const userRelation = relations.find((r) => r.fk_id_func === callerId);
+      if (!userRelation) {
+        throw new ForbiddenException('Você não possui acesso a esta tarefa');
+      }
+      return userRelation;
+    }
+
+    if (caller.type === 'company') {
+      const companyRelation = relations.find((r) => r.fk_cod_empresa === callerId);
+      if (!companyRelation) {
+        throw new ForbiddenException('Esta tarefa não pertence à sua empresa');
+      }
+      return companyRelation;
+    }
+
+    throw new ForbiddenException('Tipo de usuário inválido');
+  }
+
+  async create(
+    data: {
+      tipo_tarefa: string;
+      validade_tarefa: Date;
+      prioridade_tarefa: number;
+      fk_id_func: number;
+    },
+    caller: any,
+  ) {
+    if (caller.type !== 'company') {
+      throw new ForbiddenException('Apenas empresas podem criar tarefas');
+    }
+
+    const callerId = caller.userId || caller.sub;
+
+    if (!data.fk_id_func) {
+      throw new BadRequestException('É necessário informar o funcionário (fk_id_func) para atribuir a tarefa');
+    }
+
+    // Validar se o funcionário existe e pertence à mesma empresa
+    const employee = await this.userRepository.findOne({
+      where: { pk_id_func: data.fk_id_func },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Funcionário não encontrado');
+    }
+
+    if (employee.fk_cod_empresa !== callerId) {
+      throw new ForbiddenException('Este funcionário não pertence à sua empresa');
+    }
+
     // 1. Cria a tarefa
     const task = this.taskRepository.create({
       tipo_tarefa: data.tipo_tarefa,
@@ -36,7 +91,7 @@ export class TasksService {
     // 2. Cria a associação em func_tarefa
     const funcTarefa = this.funcTarefaRepository.create({
       fk_id_func: data.fk_id_func,
-      fk_cod_empresa: data.fk_cod_empresa,
+      fk_cod_empresa: callerId,
       fk_id_tarefa: savedTask.pk_id_tarefas,
     });
 
@@ -72,13 +127,38 @@ export class TasksService {
     };
   }
 
-  async updateStatus(taskId: number, status: number) {
+  async updateStatus(taskId: number, status: number, caller: any) {
+    await this.validateTaskAccess(taskId, caller);
+
     const task = await this.taskRepository.findOne({
       where: { pk_id_tarefas: taskId },
     });
 
     if (!task) {
       throw new NotFoundException(`Tarefa com ID ${taskId} não encontrada`);
+    }
+
+    // Regras de transição de status para funcionários
+    if (caller.type === 'user') {
+      const currentStatus = task.status_tarefa;
+      const isAllowed =
+        (currentStatus === 3 && status === 2) || // Pendente -> Em andamento
+        (currentStatus === 2 && status === 1);   // Em andamento -> Concluída
+
+      if (!isAllowed) {
+        throw new ForbiddenException(
+          `Transição de status inválida para funcionários (de ${currentStatus} para ${status})`,
+        );
+      }
+    }
+
+    // Regras de transição para Empresa (Opção B)
+    if (caller.type === 'company') {
+      if (status === 1) {
+        throw new ForbiddenException(
+          'Empresas não podem marcar tarefas diretamente como concluídas (evita concessão imprópria de pontos)',
+        );
+      }
     }
 
     task.status_tarefa = status;
@@ -101,7 +181,9 @@ export class TasksService {
     return user;
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, caller: any) {
+    await this.validateTaskAccess(id, caller);
+
     const task = await this.taskRepository.findOne({
       where: { pk_id_tarefas: id },
     });
@@ -114,7 +196,13 @@ export class TasksService {
     };
   }
 
-  async remove(id: number) {
+  async remove(id: number, caller: any) {
+    if (caller.type !== 'company') {
+      throw new ForbiddenException('Apenas empresas podem excluir tarefas');
+    }
+
+    await this.validateTaskAccess(id, caller);
+
     const task = await this.taskRepository.findOne({
       where: { pk_id_tarefas: id },
     });

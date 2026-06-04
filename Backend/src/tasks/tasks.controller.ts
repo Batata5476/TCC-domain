@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Req } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
@@ -18,46 +19,28 @@ export class TasksController {
     tipo_tarefa: string;
     validade_tarefa: string;
     prioridade_tarefa: number;
-    fk_id_func?: number; // Opcional se for funcionário criando para si
+    fk_id_func: number;
   }) {
-    let fk_id_func = body.fk_id_func;
-    let fk_cod_empresa: number;
-
-    if (req.user.type === 'user') {
-      // Funcionário criando tarefa para si mesmo
-      fk_id_func = req.user.userId;
-      // Precisamos buscar a empresa do funcionário
-      const userDetails = await this.tasksService.findOneUser(req.user.userId);
-      fk_cod_empresa = userDetails.fk_cod_empresa;
-    } else {
-      // Empresa criando e atribuindo tarefa para um funcionário
-      fk_cod_empresa = req.user.userId;
-      if (!fk_id_func) {
-        throw new Error('É necessário informar o funcionário (fk_id_func) para atribuir a tarefa.');
-      }
-    }
-
     return this.tasksService.create({
       tipo_tarefa: body.tipo_tarefa,
       validade_tarefa: new Date(body.validade_tarefa),
       prioridade_tarefa: body.prioridade_tarefa,
-      fk_id_func,
-      fk_cod_empresa,
-    });
+      fk_id_func: body.fk_id_func,
+    }, req.user);
   }
 
   @Patch(':id/status')
-  async updateStatus(@Param('id') id: string, @Body() body: { status: number }) {
-    return this.tasksService.updateStatus(+id, body.status);
+  async updateStatus(@Param('id') id: string, @Body() body: UpdateTaskStatusDto, @Req() req) {
+    return this.tasksService.updateStatus(+id, body.status, req.user);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.tasksService.findOne(+id);
+  async findOne(@Param('id') id: string, @Req() req) {
+    return this.tasksService.findOne(+id, req.user);
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
-    return this.tasksService.remove(+id);
+  async remove(@Param('id') id: string, @Req() req) {
+    return this.tasksService.remove(+id, req.user);
   }
 }

@@ -1,7 +1,8 @@
+import { IsInt, Min, Max } from 'class-validator';
+
 export class CreateWellbeingDto {
-  userId: number;
-  mood: number;
-  energyLevel: number;
-  notes: string;
-  date: Date;
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  humor_func: number;
 }
