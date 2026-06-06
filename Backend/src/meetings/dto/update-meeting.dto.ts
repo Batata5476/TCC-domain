@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsArray, IsInt, IsOptional } from 'class-validator';
+import { IsString, IsDateString, IsArray, IsInt, IsOptional, ArrayNotEmpty } from 'class-validator';
 
 export class UpdateMeetingDto {
   @IsOptional()
@@ -19,6 +19,7 @@ export class UpdateMeetingDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayNotEmpty()
   @IsInt({ each: true })
   participants?: number[];
 }

@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Meeting } from './entities/meeting.entity';
 import { MeetingParticipant } from './entities/meeting-participant.entity';
 import { User } from '../users/entities/user.entity';
@@ -16,6 +21,7 @@ export class MeetingsService {
     private readonly meetingParticipantRepository: Repository<MeetingParticipant>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   private async validateMeetingAccess(meetingId: number, caller: any): Promise<Meeting> {
@@ -26,7 +32,7 @@ export class MeetingsService {
     });
 
     if (!meeting) {
-      throw new NotFoundException('Reunião não encontrada');
+      throw new NotFoundException('Reuniao nao encontrada');
     }
 
     const relations = await this.meetingParticipantRepository.find({
@@ -37,7 +43,7 @@ export class MeetingsService {
     if (caller.type === 'user') {
       const isParticipant = relations.some((r) => r.fk_id_func === callerId);
       if (!isParticipant) {
-        throw new ForbiddenException('Você não participa desta reunião');
+        throw new ForbiddenException('Voce nao participa desta reuniao');
       }
     }
 
@@ -46,64 +52,79 @@ export class MeetingsService {
         (r) => r.funcionario && r.funcionario.fk_cod_empresa === callerId,
       );
       if (!belongsToCompany) {
-        throw new ForbiddenException('Esta reunião não pertence a funcionários da sua empresa');
+        throw new ForbiddenException('Esta reuniao nao pertence a funcionarios da sua empresa');
       }
     }
 
     return meeting;
   }
 
+  private async validateParticipantsBelongToCompany(
+    participantIds: number[],
+    companyId: number,
+  ): Promise<number[]> {
+    const uniqueParticipantIds = [...new Set(participantIds)];
+
+    if (uniqueParticipantIds.length === 0) {
+      throw new BadRequestException('A reuniao deve possuir ao menos um participante');
+    }
+
+    const participants = await this.userRepository.find({
+      where: { pk_id_func: In(uniqueParticipantIds) },
+    });
+
+    if (participants.length !== uniqueParticipantIds.length) {
+      const foundIds = new Set(participants.map((p) => p.pk_id_func));
+      const missingId = uniqueParticipantIds.find((id) => !foundIds.has(id));
+      throw new NotFoundException(`Funcionario convidado com ID ${missingId} nao encontrado`);
+    }
+
+    const externalParticipant = participants.find((p) => p.fk_cod_empresa !== companyId);
+    if (externalParticipant) {
+      throw new ForbiddenException(
+        `O funcionario ${externalParticipant.nome_func} (ID: ${externalParticipant.pk_id_func}) pertence a outra empresa`,
+      );
+    }
+
+    return uniqueParticipantIds;
+  }
+
   async create(createMeetingDto: CreateMeetingDto, caller: any) {
     const callerId = caller.userId || caller.sub;
 
-    let companyId: number;
-    if (caller.type === 'company') {
-      companyId = callerId;
-    } else {
-      const employee = await this.userRepository.findOne({
-        where: { pk_id_func: callerId },
-      });
-      if (!employee) {
-        throw new NotFoundException('Funcionário organizador não encontrado');
-      }
-      companyId = employee.fk_cod_empresa;
+    if (caller.type !== 'company') {
+      throw new ForbiddenException('Apenas empresas podem criar reunioes');
     }
 
-    // Validar se todos os participantes convidados pertencem ao mesmo grupo
-    for (const participantId of createMeetingDto.participants) {
-      const p = await this.userRepository.findOne({
-        where: { pk_id_func: participantId },
-      });
-      if (!p) {
-        throw new NotFoundException(`Funcionário convidado com ID ${participantId} não encontrado`);
-      }
-      if (p.fk_cod_empresa !== companyId) {
-        throw new ForbiddenException(
-          `O funcionário ${p.nome_func} (ID: ${participantId}) pertence a outra empresa`,
-        );
-      }
-    }
+    const participantIds = await this.validateParticipantsBelongToCompany(
+      createMeetingDto.participants,
+      callerId,
+    );
 
-    const meeting = this.meetingRepository.create({
-      data_reuniao: new Date(createMeetingDto.data_reuniao),
-      horario_reuniao: createMeetingDto.horario_reuniao,
-      assunto_reuniao: createMeetingDto.assunto_reuniao,
-      tipo_reuniao: createMeetingDto.tipo_reuniao,
+    const savedMeeting = await this.dataSource.transaction(async (manager) => {
+      const meeting = manager.create(Meeting, {
+        data_reuniao: new Date(createMeetingDto.data_reuniao),
+        horario_reuniao: createMeetingDto.horario_reuniao,
+        assunto_reuniao: createMeetingDto.assunto_reuniao,
+        tipo_reuniao: createMeetingDto.tipo_reuniao,
+      });
+
+      const meetingResult = await manager.save(Meeting, meeting);
+
+      const relations = participantIds.map((participantId) =>
+        manager.create(MeetingParticipant, {
+          fk_id_reuniao: meetingResult.pk_id_reuniao,
+          fk_id_func: participantId,
+        }),
+      );
+      await manager.save(MeetingParticipant, relations);
+
+      return meetingResult;
     });
-
-    const savedMeeting = await this.meetingRepository.save(meeting);
-
-    for (const participantId of createMeetingDto.participants) {
-      const relation = this.meetingParticipantRepository.create({
-        fk_id_reuniao: savedMeeting.pk_id_reuniao,
-        fk_id_func: participantId,
-      });
-      await this.meetingParticipantRepository.save(relation);
-    }
 
     return {
       status: 'success',
-      message: 'Reunião agendada e participantes vinculados com sucesso',
+      message: 'Reuniao agendada e participantes vinculados com sucesso',
       data: savedMeeting,
     };
   }
@@ -131,8 +152,8 @@ export class MeetingsService {
         .orderBy('meeting.data_reuniao', 'DESC')
         .getMany();
 
-      const uniqueMeetings = [];
-      const seenIds = new Set();
+      const uniqueMeetings: Meeting[] = [];
+      const seenIds = new Set<number>();
       for (const m of meetings) {
         if (!seenIds.has(m.pk_id_reuniao)) {
           seenIds.add(m.pk_id_reuniao);
@@ -146,7 +167,7 @@ export class MeetingsService {
       };
     }
 
-    throw new ForbiddenException('Tipo de usuário inválido');
+    throw new ForbiddenException('Tipo de usuario invalido');
   }
 
   async findOne(id: number, caller: any) {
@@ -159,7 +180,7 @@ export class MeetingsService {
 
   async update(id: number, updateDto: UpdateMeetingDto, caller: any) {
     if (caller.type !== 'company') {
-      throw new ForbiddenException('Apenas empresas podem atualizar reuniões');
+      throw new ForbiddenException('Apenas empresas podem atualizar reunioes');
     }
 
     await this.validateMeetingAccess(id, caller);
@@ -169,7 +190,7 @@ export class MeetingsService {
     });
 
     if (!meeting) {
-      throw new NotFoundException(`Reunião com ID ${id} não encontrada`);
+      throw new NotFoundException(`Reuniao com ID ${id} nao encontrada`);
     }
 
     if (updateDto.data_reuniao !== undefined) {
@@ -187,43 +208,44 @@ export class MeetingsService {
 
     if (updateDto.participants !== undefined) {
       const companyId = caller.userId || caller.sub;
-      for (const participantId of updateDto.participants) {
-        const p = await this.userRepository.findOne({
-          where: { pk_id_func: participantId },
-        });
-        if (!p) {
-          throw new NotFoundException(`Funcionário convidado com ID ${participantId} não encontrado`);
-        }
-        if (p.fk_cod_empresa !== companyId) {
-          throw new ForbiddenException(
-            `O funcionário ${p.nome_func} (ID: ${participantId}) pertence a outra empresa`,
-          );
-        }
-      }
+      const participantIds = await this.validateParticipantsBelongToCompany(
+        updateDto.participants,
+        companyId,
+      );
 
-      await this.meetingParticipantRepository.delete({ fk_id_reuniao: id });
+      const updated = await this.dataSource.transaction(async (manager) => {
+        await manager.delete(MeetingParticipant, { fk_id_reuniao: id });
 
-      for (const participantId of updateDto.participants) {
-        const relation = this.meetingParticipantRepository.create({
-          fk_id_reuniao: id,
-          fk_id_func: participantId,
-        });
-        await this.meetingParticipantRepository.save(relation);
-      }
+        const relations = participantIds.map((participantId) =>
+          manager.create(MeetingParticipant, {
+            fk_id_reuniao: id,
+            fk_id_func: participantId,
+          }),
+        );
+        await manager.save(MeetingParticipant, relations);
+
+        return manager.save(Meeting, meeting);
+      });
+
+      return {
+        status: 'success',
+        message: 'Reuniao atualizada com sucesso',
+        data: updated,
+      };
     }
 
     const updated = await this.meetingRepository.save(meeting);
 
     return {
       status: 'success',
-      message: 'Reunião atualizada com sucesso',
+      message: 'Reuniao atualizada com sucesso',
       data: updated,
     };
   }
 
   async remove(id: number, caller: any) {
     if (caller.type !== 'company') {
-      throw new ForbiddenException('Apenas empresas podem excluir reuniões');
+      throw new ForbiddenException('Apenas empresas podem excluir reunioes');
     }
 
     await this.validateMeetingAccess(id, caller);
@@ -233,14 +255,14 @@ export class MeetingsService {
     });
 
     if (!meeting) {
-      throw new NotFoundException(`Reunião com ID ${id} não encontrada`);
+      throw new NotFoundException(`Reuniao com ID ${id} nao encontrada`);
     }
 
     await this.meetingRepository.remove(meeting);
 
     return {
       status: 'success',
-      message: 'Reunião excluída com sucesso',
+      message: 'Reuniao excluida com sucesso',
     };
   }
 }

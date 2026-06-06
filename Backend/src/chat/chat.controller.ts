@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseGuards, Req } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -11,22 +11,22 @@ export class ChatController {
 
   
   @Get()
-  findAll() {
-    return this.chatService.findAll();
+  findAll(@Req() req) {
+    return this.chatService.findAll(req.user);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.chatService.findOne(+id);
+  findOne(@Param('id') id: string, @Req() req) {
+    return this.chatService.findOne(+id, req.user);
   }
 
   @Post()
-  create(@Body() createMessageDto: CreateMessageDto) {
-    return this.chatService.create(createMessageDto);
+  create(@Body() createMessageDto: CreateMessageDto, @Req() req) {
+    return this.chatService.create(createMessageDto, req.user);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.chatService.remove(+id);
+  remove(@Param('id') id: string, @Req() req) {
+    return this.chatService.remove(+id, req.user);
   }
 }

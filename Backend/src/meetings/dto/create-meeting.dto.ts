@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsArray, IsInt } from 'class-validator';
+import { IsString, IsDateString, IsArray, IsInt, ArrayNotEmpty } from 'class-validator';
 
 export class CreateMeetingDto {
   @IsDateString()
@@ -14,6 +14,7 @@ export class CreateMeetingDto {
   tipo_reuniao: string;
 
   @IsArray()
+  @ArrayNotEmpty()
   @IsInt({ each: true })
   participants: number[];
 }

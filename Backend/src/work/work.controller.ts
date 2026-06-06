@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Req } from '@nestjs/common';
 import { WorkService } from './work.service';
 import { CreateWorkDto } from './dto/create-work.dto';
+import { UpdateWorkDto } from './dto/update-work.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 
@@ -11,27 +12,27 @@ export class WorkController {
   constructor(private readonly workService: WorkService) {}
 
   @Get()
-  findAll() {
-    return this.workService.findAll();
+  findAll(@Req() req) {
+    return this.workService.findAll(req.user);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.workService.findOne(+id);
+  findOne(@Param('id') id: string, @Req() req) {
+    return this.workService.findOne(+id, req.user);
   }
 
   @Post()
-  create(@Body() createWorkDto: CreateWorkDto) {
-    return this.workService.create(createWorkDto);
+  create(@Body() createWorkDto: CreateWorkDto, @Req() req) {
+    return this.workService.create(createWorkDto, req.user);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateDto: Partial<CreateWorkDto>) {
-    return this.workService.update(+id, updateDto);
+  update(@Param('id') id: string, @Body() updateDto: UpdateWorkDto, @Req() req) {
+    return this.workService.update(+id, updateDto, req.user);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.workService.remove(+id);
+  remove(@Param('id') id: string, @Req() req) {
+    return this.workService.remove(+id, req.user);
   }
 }
