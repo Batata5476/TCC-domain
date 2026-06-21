@@ -1,3 +1,4 @@
+
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import React, { useState } from "react";
 import { useRouter } from "expo-router";
@@ -33,8 +34,15 @@ export default function CadastroEmpresa() {
   const [confirmarSenha, setConfirmarSenha] = useState("");
 
   const handleRegister = async () => {
-    if (!nome || !cnpj || !email || !tipo || !senha) {
+    const cleanCnpj = cnpj.replace(/\D/g, "");
+
+    if (!nome || !cleanCnpj || !email || !tipo || !senha) {
       Alert.alert("Erro", "Por favor, preencha todos os campos.");
+      return;
+    }
+
+    if (cleanCnpj.length !== 14) {
+      Alert.alert("Erro", "Informe um CNPJ válido com 14 números.");
       return;
     }
 
@@ -51,7 +59,7 @@ export default function CadastroEmpresa() {
         },
         body: JSON.stringify({
           nome_empresa: nome,
-          cnpj_empresa: cnpj,
+          cnpj_empresa: cleanCnpj,
           email_empresa: email,
           tipo_empresa: tipo,
           senha_empresa: senha,

@@ -60,6 +60,7 @@ export default function Dashboard() {
 
   // Estados de UI (mantidos do visual original)
   const [open, setOpen] = useState(true);
+  const [otherOpen, setOtherOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false); // controla o menu do botão +
   const [hoveredDate, setHoveredDate] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -369,16 +370,27 @@ export default function Dashboard() {
         <View style={[styles.card, styles.cardSpacing]}>
           <TouchableOpacity
             style={styles.cardHeader}
-            onPress={() => {/* pode expandir outras tarefas futuramente */}}
+            onPress={() => setOtherOpen(!otherOpen)}
             activeOpacity={0.8}
           >
             <Text style={styles.cardTitle}>Outras Tarefas</Text>
-            <Ionicons name="chevron-down" size={24} color="#285A71" />
+
+            <Ionicons
+              name={otherOpen ? "chevron-up" : "chevron-down"}
+              size={24}
+              color="#285A71"
+            />
           </TouchableOpacity>
 
-          {otherTasks.length > 0 && (
+          {otherOpen && (
             <View style={styles.taskList}>
-              {otherTasks.map(renderTask)}
+              {otherTasks.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  Nenhuma outra tarefa para este dia.
+                </Text>
+              ) : (
+                otherTasks.map(renderTask)
+              )}
             </View>
           )}
         </View>

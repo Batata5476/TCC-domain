@@ -20,7 +20,7 @@ export async function loginCompany(cnpj: string, senha_empresa: string) {
     throw new Error(data.message || 'Erro no login');
   }
 
-  // O backend retorna { status, data: { access_token } }
+  // O backend retorna{ status, data: { access_token } }
   const token = data.data.access_token;
 
   if (Platform.OS === 'web') {
@@ -60,7 +60,27 @@ export async function loginEmployee(cpf: string, senha_func: string) {
   
     return data;
 }
+// Função para gerar token de acesso para empresas, usada no Login 
+export async function generateCompanyToken(cnpj: string, senha_empresa: string) {
+  const response = await fetch(`${API_URL}/auth/company/login`, {
+    method: 'POST',
+     headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      cnpj: cnpj.replace(/\D/g, ''),
+      senha: senha_empresa,
+    }),
+  });
+  const data = await response.json();
 
+  // Condicional para garantir que o token seja retornado mesmo que a resposta do backend seja diferente do esperado
+  if (!response.ok) {
+    throw new Error(data.message || 'Erro ao gerar token');
+  }
+
+  return data.data.access_token as string;
+}
 // Função para gerar token de acesso para funcionários, usada no Login  
 export async function generateEmployeeToken(cpf: string, senha_func: string) {
   const response = await fetch(`${API_URL}/auth/user/login`, {
@@ -73,6 +93,7 @@ export async function generateEmployeeToken(cpf: string, senha_func: string) {
       senha: senha_func,
     }),
   });
+  
 
   const data = await response.json();
 

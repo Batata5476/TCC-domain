@@ -14,6 +14,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="loginEmpresa" options={{ title: "Empresa" }} />
+        <Stack.Screen name="inserirTokenEmpresa" options={{ title: "Inserir token" }} />
         <Stack.Screen name="loginFuncionario" options={{ title: "Funcionario" }} />
         <Stack.Screen name="cadastroEmpresa" options={{ title: "Cadastro empresa" }} />
         <Stack.Screen name="cadastroFuncionario" options={{ title: "Cadastro funcionario" }} />

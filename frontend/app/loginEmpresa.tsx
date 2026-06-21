@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
-import { loginCompany } from "../services/auth";
+import { generateCompanyToken } from "../services/auth";
+
+
 
 type InputProps = {
   placeholder: string;
@@ -19,6 +21,7 @@ function Input({ placeholder, secureTextEntry, value, onChangeText }: InputProps
       onChangeText={onChangeText}
       style={styles.input}
     />
+    
   );
 }
 
@@ -33,32 +36,44 @@ export default function LoginEmpresa() {
       return;
     }
 
-    try {
-      const response = await loginCompany(cnpj, senha);
-      Alert.alert("Sucesso", "Login realizado com sucesso!");
-      router.push("/dashboard");
-    } catch (error: any) {
-      Alert.alert("Erro", error.message || "Falha ao realizar login.");
-    }
-  };
+   try {
+        const generatedToken = await generateCompanyToken(cnpj, senha);
+        Alert.alert("Sucesso", "Token gerado com sucesso.");
+        router.push({
+          pathname: "/inserirTokenEmpresa",
+          params: { token: generatedToken },
+        });
+      } catch (error: any) {
+        Alert.alert("Erro", error.message || "Nao foi possivel gerar o token.");
+      }
+    };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Olá! Seja bem vindo(a) de volta</Text>
+     
+    <View style={styles.card}>
+      <Text style={styles.label}>CNPJ</Text>
+      <Input placeholder="Value" value={cnpj} onChangeText={setCnpj} />
 
-      <Input placeholder="CNPJ" value={cnpj} onChangeText={setCnpj} />
-      <Input placeholder="Senha (Código)" secureTextEntry value={senha} onChangeText={setSenha} />
-
+      <Text style={styles.label}>Senha</Text>
+      <Input
+        placeholder="Value"
+        secureTextEntry
+        value={senha}
+        onChangeText={setSenha}
+      />
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Entrar</Text>
+        <Text style={styles.buttonText}>Enviar token</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.secondaryButton}
         onPress={() => router.push("/cadastroEmpresa")}
       >
-        <Text style={styles.secondaryButtonText}>Não tenho conta</Text>
-      </TouchableOpacity>
+        <Text style={styles.secondaryButtonText}>Primeiro acesso</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -66,6 +81,20 @@ export default function LoginEmpresa() {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", padding: 24 },
   title: { textAlign: "center", marginBottom: 20 },
+  card: {
+    backgroundColor: "#FFFFFF",
+    padding: 20,
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  label: {
+    marginBottom: 6,
+    color: "#333",
+  },
   input: {
     backgroundColor: "#FEFDF9",
     padding: 12,
