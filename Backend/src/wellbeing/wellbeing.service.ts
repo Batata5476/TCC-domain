@@ -19,6 +19,8 @@ export class WellbeingService {
 
     const humor = await this.humorRepository.findOne({
       where: { pk_id_humor: humorId },
+
+       
     });
 
     if (!humor) {
@@ -48,7 +50,6 @@ export class WellbeingService {
     if (caller.type !== 'user') {
       throw new ForbiddenException('Apenas funcionários podem registrar humor');
     }
-
     const callerId = caller.userId || caller.sub;
 
     // Validar se o funcionário já postou humor hoje (Ajuste 2)

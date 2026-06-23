@@ -17,6 +17,6 @@ export class Company {
   @Column()
   tipo_empresa: string;
 
-  @Column()
+  @Column({ select: false })
   senha_empresa: string;
 }

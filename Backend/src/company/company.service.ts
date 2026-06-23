@@ -53,10 +53,12 @@ export class CompanyService {
       senha_empresa: hashedPassword,
     });
     const saved = await this.companyRepository.save(company);
+    const { senha_empresa: _senhaEmpresa, ...companyWithoutPassword } = saved;
+
     return {
       status: 'success',
       message: 'Empresa criada com sucesso',
-      data: saved,
+      data: companyWithoutPassword,
     };
   }
 

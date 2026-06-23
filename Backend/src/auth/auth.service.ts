@@ -66,9 +66,11 @@ export class AuthService {
 
     const cleanCnpj = cnpj.replace(/\D/g, '');
 
-    const company = await this.companyRepository.findOne({
-      where: { cnpj_empresa: cleanCnpj },
-    });
+    const company = await this.companyRepository
+      .createQueryBuilder('company')
+      .where('company.cnpj_empresa = :cnpj', { cnpj: cleanCnpj })
+      .addSelect('company.senha_empresa')
+      .getOne();
 
     if (!company) {
       throw new UnauthorizedException('Credenciais inválidas');
