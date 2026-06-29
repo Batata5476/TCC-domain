@@ -20,10 +20,10 @@ export class UsersController {
     return this.usersService.findOne(+id, req.user);
   }
 
-   // usuarios podem ser criados sem token 
+  @UseGuards(JwtAuthGuard)
   @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  create(@Body() createUserDto: CreateUserDto, @Request() req) {
+    return this.usersService.create(createUserDto, req.user);
   }
 
   @UseGuards(JwtAuthGuard) // apenas requisicoes com token JWT valido podem atualizar um usuario

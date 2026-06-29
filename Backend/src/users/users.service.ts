@@ -1,39 +1,60 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
+import { Role } from './entities/role.entity';
+import { Setor } from '../company/entities/setor.entity';
+import { Permission } from './entities/permission.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Role)
+    private roleRepository: Repository<Role>,
+    @InjectRepository(Setor)
+    private setorRepository: Repository<Setor>,
+    @InjectRepository(Permission)
+    private permissionRepository: Repository<Permission>,
+    private auditService: AuditService,
   ) {}
 
+  private generateRandomCode(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      if (i === 4) code += '-';
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
   private async validateUserAccess(targetUserId: number, caller: any): Promise<User> {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
     const targetUser = await this.usersRepository.findOne({
-      where: { pk_id_func: targetUserId },
+      where: { id: targetUserId },
     });
 
-    if (!targetUser) {
+    if (!targetUser || targetUser.status === 'DELETED') {
       throw new NotFoundException(`Usuário com ID ${targetUserId} não encontrado`);
     }
 
-    // Regra para Funcionário
-    if (caller.type === 'user') {
+    // Admins da mesma empresa têm acesso. Usuários comuns só têm acesso a si mesmos.
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    if (isCompanyAdmin) {
+      if (targetUser.empresa_id !== caller.empresa_id) {
+        throw new ForbiddenException('Funcionário não pertence à sua empresa');
+      }
+    } else {
       if (callerId !== targetUserId) {
         throw new ForbiddenException('Você não possui acesso a este usuário');
-      }
-    }
-
-    // Regra para Empresa
-    if (caller.type === 'company') {
-      if (targetUser.fk_cod_empresa !== callerId) {
-        throw new ForbiddenException('Funcionário não pertence à sua empresa');
       }
     }
 
@@ -41,70 +62,267 @@ export class UsersService {
   }
 
   async findAll(caller: any) {
-    if (caller.type !== 'company') {
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    if (!isCompanyAdmin) {
       throw new ForbiddenException('Você não possui permissão para listar todos os usuários');
     }
 
-    const callerId = caller.userId || caller.sub;
     const users = await this.usersRepository.find({
-      where: { fk_cod_empresa: callerId },
+      where: { empresa_id: caller.empresa_id },
+      relations: ['role', 'setor', 'permissions'],
     });
+
+    // Filtra usuários que foram deletados logicamente (Soft Delete)
+    const activeUsers = users.filter((u) => u.status !== 'DELETED');
 
     return {
       status: 'success',
-      data: users,
+      data: activeUsers,
     };
   }
 
   async findOne(id: number, caller: any) {
     const user = await this.validateUserAccess(id, caller);
+    // Recarrega relações
+    const userWithRelations = await this.usersRepository.findOne({
+      where: { id: user.id },
+      relations: ['role', 'setor', 'permissions'],
+    });
+
     return {
       status: 'success',
-      data: user,
+      data: userWithRelations,
     };
   }
 
-  async create(createUserDto: CreateUserDto) {
-    const cleanCpf = createUserDto.cpf_func.replace(/\D/g, '');
-    const hashedPassword = await bcrypt.hash(createUserDto.senha_func, 10);
+  async create(createUserDto: CreateUserDto, caller: any) {
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    const { senha_func, cpf_func, ...rest } = createUserDto;
-    const user = this.usersRepository.create({
-      ...rest,
-      cpf_func: cleanCpf,
-      senha_func: hashedPassword,
+    if (!isCompanyAdmin) {
+      throw new ForbiddenException('Você não possui permissão para cadastrar funcionários');
+    }
+
+    const cleanCpf = createUserDto.cpf.replace(/\D/g, '');
+
+    // Verificar se o CPF já está em uso por um usuário ativo
+    const existingCpf = await this.usersRepository.findOne({
+      where: { cpf: cleanCpf },
     });
+    if (existingCpf && existingCpf.status !== 'DELETED') {
+      throw new BadRequestException('CPF já cadastrado');
+    }
+
+    // Verificar se o Email já está em uso por um usuário ativo
+    const existingEmail = await this.usersRepository.findOne({
+      where: { email: createUserDto.email.trim() },
+    });
+    if (existingEmail && existingEmail.status !== 'DELETED') {
+      throw new BadRequestException('E-mail já cadastrado');
+    }
+
+    // Buscar Role pelo nome
+    const role = await this.roleRepository.findOne({
+      where: { nome: createUserDto.role_name },
+    });
+    if (!role) {
+      throw new NotFoundException(`Role ${createUserDto.role_name} não encontrada`);
+    }
+
+    // Buscar Setor
+    const setor = await this.setorRepository.findOne({
+      where: { id: createUserDto.setor_id, empresa_id: caller.empresa_id },
+    });
+    if (!setor) {
+      throw new NotFoundException(`Setor de ID ${createUserDto.setor_id} não encontrado na sua empresa`);
+    }
+
+    // Gera código de ativação e token temporário de primeiro acesso
+    const rawToken = this.generateRandomCode();
+    const hashedToken = await bcrypt.hash(rawToken, 10);
+    const code = this.generateRandomCode();
+
+    // Mapeia permissões adicionais se fornecidas
+    let permissions: Permission[] = [];
+    if (createUserDto.permissions && createUserDto.permissions.length > 0) {
+      permissions = await this.permissionRepository.find({
+        where: { nome: In(createUserDto.permissions) },
+      });
+    }
+
+    // Senha temporária aleatória e grande (será redefinida no primeiro acesso)
+    const dummyPassword = await bcrypt.hash(Math.random().toString(36), 10);
+
+    const user = this.usersRepository.create({
+      nome: createUserDto.nome,
+      email: createUserDto.email.trim(),
+      cpf: cleanCpf,
+      senha: dummyPassword,
+      cargo: createUserDto.cargo,
+      setor_id: setor.id,
+      role_id: role.id,
+      empresa_id: caller.empresa_id,
+      status: 'PENDING',
+      primeiro_acesso: true,
+      activation_code: code,
+      token: hashedToken,
+      token_expiracao: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48h
+      telefone: createUserDto.telefone,
+      foto: createUserDto.foto,
+      permissions,
+    });
+
     const saved = await this.usersRepository.save(user);
+
+    // Auditoria
+    await this.auditService.log({
+      usuario_id: caller.sub,
+      empresa_id: caller.empresa_id,
+      acao: 'USER_CREATED',
+      entidade: 'User',
+      entidade_id: saved.id,
+      detalhes: `Funcionário ${saved.nome} criado com role ${role.nome} e código de ativação ${code}`,
+    });
+
+    // Simulação de envio de e-mail com dados de ativação
+    console.log('\n---------------- MOCK EMAIL DE CADASTRO DE FUNCIONÁRIO ----------------');
+    console.log(`Para: ${saved.email}`);
+    console.log(`Olá, ${saved.nome}! Você foi cadastrado na empresa.`);
+    console.log(`Use as informações abaixo para seu primeiro acesso:`);
+    console.log(`Código de ativação: ${code}`);
+    console.log(`Token: ${rawToken}`);
+    console.log(`Link direto: http://localhost:8081/primeiro-acesso?code=${code}&token=${rawToken}`);
+    console.log('------------------------------------------------------------------------\n');
+
     return {
       status: 'success',
-      message: 'Usuário criado com sucesso',
+      message: 'Funcionário cadastrado com sucesso e e-mail de ativação gerado',
       data: saved,
+      // Retornar as chaves cruas em dev para testes fáceis na tela/insomnia
+      _dev_: {
+        code,
+        token: rawToken,
+      },
     };
   }
 
   async update(id: number, updateUserDto: UpdateUserDto, caller: any) {
-    await this.validateUserAccess(id, caller);
-    
-    const { nome_func, email_func, foto_func, senha_func } = updateUserDto;
-    const dataToUpdate: any = {};
-    if (nome_func !== undefined) dataToUpdate.nome_func = nome_func;
-    if (email_func !== undefined) dataToUpdate.email_func = email_func;
-    if (foto_func !== undefined) dataToUpdate.foto_func = foto_func;
-    if (senha_func !== undefined) {
-      dataToUpdate.senha_func = await bcrypt.hash(senha_func, 10);
+    const targetUser = await this.validateUserAccess(id, caller);
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    // Se for usuário comum, só pode editar campos específicos (nome, email, foto, senha, telefone)
+    if (!isCompanyAdmin) {
+      if (
+        updateUserDto.role_name !== undefined ||
+        updateUserDto.permissions !== undefined ||
+        updateUserDto.status !== undefined ||
+        updateUserDto.setor_id !== undefined ||
+        updateUserDto.cargo !== undefined
+      ) {
+        throw new ForbiddenException('Apenas administradores podem alterar permissões, setores ou status');
+      }
     }
 
-    await this.usersRepository.update(id, dataToUpdate);
-    return this.findOne(id, caller);
+    // Atualizar dados cadastrais
+    if (updateUserDto.nome !== undefined) targetUser.nome = updateUserDto.nome;
+    if (updateUserDto.email !== undefined) targetUser.email = updateUserDto.email.trim();
+    if (updateUserDto.foto !== undefined) targetUser.foto = updateUserDto.foto;
+    if (updateUserDto.telefone !== undefined) targetUser.telefone = updateUserDto.telefone;
+    if (updateUserDto.cargo !== undefined) targetUser.cargo = updateUserDto.cargo;
+
+    if (updateUserDto.senha !== undefined) {
+      // Validar senha
+      const minLength = updateUserDto.senha.length >= 8;
+      const hasUpper = /[A-Z]/.test(updateUserDto.senha);
+      const hasLower = /[a-z]/.test(updateUserDto.senha);
+      const hasNumber = /[0-9]/.test(updateUserDto.senha);
+      const hasSymbol = /[^A-Za-z0-9]/.test(updateUserDto.senha);
+      if (!minLength || !hasUpper || !hasLower || !hasNumber || !hasSymbol) {
+        throw new BadRequestException('A senha não atende às diretrizes de segurança.');
+      }
+      targetUser.senha = await bcrypt.hash(updateUserDto.senha, 10);
+    }
+
+    // Administrador atualizando dados sensíveis
+    if (isCompanyAdmin) {
+      if (updateUserDto.status !== undefined) {
+        targetUser.status = updateUserDto.status;
+      }
+
+      if (updateUserDto.setor_id !== undefined) {
+        const sector = await this.setorRepository.findOne({
+          where: { id: updateUserDto.setor_id, empresa_id: caller.empresa_id },
+        });
+        if (!sector) {
+          throw new NotFoundException('Setor não encontrado');
+        }
+        targetUser.setor_id = sector.id;
+      }
+
+      if (updateUserDto.role_name !== undefined) {
+        const role = await this.roleRepository.findOne({
+          where: { nome: updateUserDto.role_name },
+        });
+        if (!role) {
+          throw new NotFoundException('Role não encontrada');
+        }
+        targetUser.role_id = role.id;
+      }
+
+      if (updateUserDto.permissions !== undefined) {
+        const dbPermissions = await this.permissionRepository.find({
+          where: { nome: In(updateUserDto.permissions) },
+        });
+        targetUser.permissions = dbPermissions;
+      }
+    }
+
+    const saved = await this.usersRepository.save(targetUser);
+
+    // Auditoria
+    await this.auditService.log({
+      usuario_id: caller.sub,
+      empresa_id: caller.empresa_id,
+      acao: 'USER_UPDATED',
+      entidade: 'User',
+      entidade_id: saved.id,
+      detalhes: `Cadastro do usuário ${saved.nome} atualizado`,
+    });
+
+    return {
+      status: 'success',
+      message: 'Usuário atualizado com sucesso',
+      data: saved,
+    };
   }
 
   async remove(id: number, caller: any) {
-    if (caller.type !== 'company') {
-      throw new ForbiddenException('Funcionários não têm permissão para excluir contas');
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    if (!isCompanyAdmin) {
+      throw new ForbiddenException('Apenas administradores podem remover funcionários');
     }
 
     const user = await this.validateUserAccess(id, caller);
-    await this.usersRepository.remove(user);
+    
+    // Soft Delete: Define status como DELETED
+    user.status = 'DELETED';
+    await this.usersRepository.save(user);
+
+    // Auditoria
+    await this.auditService.log({
+      usuario_id: caller.sub,
+      empresa_id: caller.empresa_id,
+      acao: 'USER_DELETED',
+      entidade: 'User',
+      entidade_id: user.id,
+      detalhes: `Usuário ${user.nome} (ID: ${user.id}) removido logicamente (Soft Delete)`,
+    });
+
     return {
       status: 'success',
       message: 'Usuário removido com sucesso',

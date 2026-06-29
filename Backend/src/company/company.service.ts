@@ -4,17 +4,23 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Company } from './entities/company.entity';
 import { CreateCompanyDto } from './dto/create-company.dto';
+import { User } from '../users/entities/user.entity';
+import { Role } from '../users/entities/role.entity';
 
 @Injectable()
 export class CompanyService {
   constructor(
     @InjectRepository(Company)
     private companyRepository: Repository<Company>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    @InjectRepository(Role)
+    private roleRepository: Repository<Role>,
   ) {}
 
-  async findAll(userId: number) {
+  async findAll(empresaId: number) {
     const companies = await this.companyRepository.find({
-      where: { pk_cod_empresa: userId },
+      where: { id: empresaId },
     });
     return {
       status: 'success',
@@ -23,17 +29,16 @@ export class CompanyService {
     };
   }
 
-  async findOne(id: number, userId: number) {
+  async findOne(id: number, empresaId: number) {
     const company = await this.companyRepository.findOne({
-      where: { pk_cod_empresa: id },
+      where: { id },
     });
 
     if (!company) {
       throw new NotFoundException(`Empresa com ID ${id} não encontrada`);
     }
 
-    // Segurança: Uma empresa só pode ver seus próprios dados
-    if (company.pk_cod_empresa !== userId) {
+    if (company.id !== empresaId) {
       throw new ForbiddenException('Você não tem permissão para acessar esta empresa');
     }
 
@@ -45,27 +50,58 @@ export class CompanyService {
   }
 
   async create(createCompanyDto: CreateCompanyDto) {
-    const { senha_empresa, ...rest } = createCompanyDto;
-    const hashedPassword = await bcrypt.hash(senha_empresa, 10);
+    const { senha_empresa, cnpj, nome, email, tipo_empresa } = createCompanyDto;
     
+    // 1. Salvar empresa na tabela 'empresa'
     const company = this.companyRepository.create({
-      ...rest,
-      senha_empresa: hashedPassword,
+      cnpj: cnpj.replace(/\D/g, ''),
+      nome,
+      email,
+      tipo_empresa,
     });
-    const saved = await this.companyRepository.save(company);
-    const { senha_empresa: _senhaEmpresa, ...companyWithoutPassword } = saved;
+    const savedCompany = await this.companyRepository.save(company);
+
+    // 2. Criar correspondente usuário master na tabela 'usuario'
+    const adminRole = await this.roleRepository.findOne({
+      where: { nome: 'Administrador Master' },
+    });
+    if (!adminRole) {
+      throw new NotFoundException('Role Administrador Master não encontrada no banco');
+    }
+
+    const hashedPassword = await bcrypt.hash(senha_empresa, 10);
+    const uniqueCpf = String(10000000000 + savedCompany.id); // CPF único fictício
+
+    const masterUser = this.userRepository.create({
+      empresa_id: savedCompany.id,
+      role_id: adminRole.id,
+      nome: `Admin ${savedCompany.nome}`,
+      email: savedCompany.email,
+      cpf: uniqueCpf,
+      senha: hashedPassword,
+      status: 'ACTIVE',
+      primeiro_acesso: false,
+      cargo: 'Administrador Master',
+    });
+    await this.userRepository.save(masterUser);
 
     return {
       status: 'success',
-      message: 'Empresa criada com sucesso',
-      data: companyWithoutPassword,
+      message: 'Empresa e Usuário Master criados com sucesso',
+      data: savedCompany,
     };
   }
 
-  async update(id: number, updateCompanyDto: Partial<CreateCompanyDto>, userId: number) {
-    await this.findOne(id, userId); // Já verifica existência e permissão
-    await this.companyRepository.update(id, updateCompanyDto);
-    const updated = await this.findOne(id, userId);
+  async update(id: number, updateCompanyDto: Partial<CreateCompanyDto>, empresaId: number) {
+    await this.findOne(id, empresaId); // Verifica existência e permissão
+    const cleanedDto: any = {};
+    if (updateCompanyDto.nome !== undefined) cleanedDto.nome = updateCompanyDto.nome;
+    if (updateCompanyDto.email !== undefined) cleanedDto.email = updateCompanyDto.email;
+    if (updateCompanyDto.cnpj !== undefined) cleanedDto.cnpj = updateCompanyDto.cnpj.replace(/\D/g, '');
+    if (updateCompanyDto.tipo_empresa !== undefined) cleanedDto.tipo_empresa = updateCompanyDto.tipo_empresa;
+
+    await this.companyRepository.update(id, cleanedDto);
+    const updated = await this.findOne(id, empresaId);
     return {
       status: 'success',
       message: 'Empresa atualizada com sucesso',
@@ -73,8 +109,8 @@ export class CompanyService {
     };
   }
 
-  async remove(id: number, userId: number) {
-    const response = await this.findOne(id, userId);
+  async remove(id: number, empresaId: number) {
+    const response = await this.findOne(id, empresaId);
     await this.companyRepository.remove(response.data as Company);
     return {
       status: 'success',

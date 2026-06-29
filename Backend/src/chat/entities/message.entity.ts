@@ -19,8 +19,8 @@ export class Message {
   @Column()
   fk_id_func: number;
 
-  @Column()
-  fk_id_midia: number;
+  @Column({ nullable: true })
+  fk_id_midia?: number;
 
   @ManyToOne(() => Chat)
   @JoinColumn({ name: 'fk_id_chat' })

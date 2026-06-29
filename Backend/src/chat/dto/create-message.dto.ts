@@ -1,4 +1,4 @@
-import { IsInt, IsString, Length } from 'class-validator';
+import { IsInt, IsOptional, IsString, Length } from 'class-validator';
 
 export class CreateMessageDto {
   @IsInt()
@@ -9,5 +9,6 @@ export class CreateMessageDto {
   conteudo_mensagens: string;
 
   @IsInt()
-  fk_id_midia: number;
+  @IsOptional()
+  fk_id_midia?: number;
 }

@@ -1,8 +1,6 @@
-export type JwtSubjectType = 'company' | 'user';
-
 export interface JwtPayload {
-  sub: number;
-  type?: JwtSubjectType;
-  cnpj?: string;
-  cpf?: string;
+  sub: number;          // usuario.id
+  empresa_id: number;   // empresa.id
+  role: string;         // ex: 'Administrador Master', 'Funcionário'
+  permissions: string[]; // ex: ['tasks.create', 'reports.view']
 }

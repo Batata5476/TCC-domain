@@ -1,4 +1,3 @@
-// JWT Authentication Strategy
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -14,12 +13,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
+  // The returned object is injected as req.user in every guarded route
   async validate(payload: JwtPayload) {
     return {
-      userId: payload.sub,
-      type: payload.type,
-      cnpj: payload.cnpj,
-      cpf: payload.cpf,
+      sub: payload.sub,
+      empresa_id: payload.empresa_id,
+      role: payload.role,
+      permissions: payload.permissions,
     };
   }
 }

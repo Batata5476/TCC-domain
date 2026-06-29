@@ -15,6 +15,7 @@ import { OccurrencesModule } from './occurrences/occurrences.module';
 import { WorkModule } from './work/work.module';
 import { HealthModule } from './health/health.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     WorkModule,
     HealthModule,
     DashboardModule,
+    AuditModule,
   ],
 
   // Apply the ThrottlerGuard globally to all routes

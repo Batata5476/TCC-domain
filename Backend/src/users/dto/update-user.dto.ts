@@ -1,20 +1,45 @@
-import { IsString, IsEmail, IsOptional, MinLength } from 'class-validator';
+import { IsString, IsEmail, IsOptional, MinLength, IsInt, IsArray, IsIn } from 'class-validator';
 
 export class UpdateUserDto {
   @IsString()
   @IsOptional()
-  nome_func?: string;
+  nome?: string;
 
   @IsEmail()
   @IsOptional()
-  email_func?: string;
+  email?: string;
 
   @IsString()
   @IsOptional()
-  foto_func?: string;
+  foto?: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   @IsOptional()
-  senha_func?: string;
+  senha?: string;
+
+  @IsString()
+  @IsOptional()
+  cargo?: string;
+
+  @IsInt()
+  @IsOptional()
+  setor_id?: number;
+
+  @IsString()
+  @IsOptional()
+  role_name?: string;
+
+  @IsArray()
+  @IsOptional()
+  permissions?: string[];
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['PENDING', 'ACTIVE', 'BLOCKED', 'DISABLED', 'DELETED'])
+  status?: string;
+
+  @IsString()
+  @IsOptional()
+  telefone?: string;
 }

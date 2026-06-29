@@ -15,30 +15,28 @@ export class WellbeingService {
   ) {}
 
   private async validateWellbeingAccess(humorId: number, caller: any): Promise<Humor> {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
     const humor = await this.humorRepository.findOne({
       where: { pk_id_humor: humorId },
-
-       
     });
 
     if (!humor) {
       throw new NotFoundException(`Registro de humor com ID ${humorId} não encontrado`);
     }
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       if (humor.fk_id_func !== callerId) {
         throw new ForbiddenException('Você não possui acesso a este registro de humor');
       }
-    }
-
-    if (caller.type === 'company') {
+    } else {
       const employee = await this.userRepository.findOne({
-        where: { pk_id_func: humor.fk_id_func },
+        where: { id: humor.fk_id_func },
       });
 
-      if (!employee || employee.fk_cod_empresa !== callerId) {
+      if (!employee || employee.empresa_id !== caller.empresa_id) {
         throw new ForbiddenException('Este registro de humor não pertence a um funcionário da sua empresa');
       }
     }
@@ -47,12 +45,11 @@ export class WellbeingService {
   }
 
   async create(createWellbeingDto: CreateWellbeingDto, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionários podem registrar humor');
     }
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
 
-    // Validar se o funcionário já postou humor hoje (Ajuste 2)
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date();
@@ -85,9 +82,11 @@ export class WellbeingService {
   }
 
   async findAll(caller: any) {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       const humores = await this.humorRepository.find({
         where: { fk_id_func: callerId },
         order: { dth_humor: 'DESC' },
@@ -96,16 +95,13 @@ export class WellbeingService {
         status: 'success',
         data: humores,
       };
-    }
-
-    if (caller.type === 'company') {
-      // Filtrar apenas humores dos últimos 30 dias (Ajuste 3)
+    } else {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const humores = await this.humorRepository.createQueryBuilder('humor')
-        .innerJoin(User, 'user', 'humor.fk_id_func = user.pk_id_func')
-        .where('user.fk_cod_empresa = :companyId', { companyId: callerId })
+        .innerJoin(User, 'user', 'humor.fk_id_func = user.id')
+        .where('user.empresa_id = :companyId', { companyId: caller.empresa_id })
         .andWhere('humor.dth_humor >= :thirtyDaysAgo', { thirtyDaysAgo })
         .orderBy('humor.dth_humor', 'DESC')
         .getMany();
@@ -115,8 +111,6 @@ export class WellbeingService {
         data: humores,
       };
     }
-
-    throw new ForbiddenException('Tipo de usuário inválido');
   }
 
   async findOne(id: number, caller: any) {

@@ -17,7 +17,9 @@ export class TasksService {
   ) {}
 
   private async validateTaskAccess(taskId: number, caller: any): Promise<FuncTarefa> {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
     const relations = await this.funcTarefaRepository.find({
       where: { fk_id_tarefa: taskId },
@@ -27,23 +29,19 @@ export class TasksService {
       throw new NotFoundException('Tarefa não encontrada');
     }
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       const userRelation = relations.find((r) => r.fk_id_func === callerId);
       if (!userRelation) {
         throw new ForbiddenException('Você não possui acesso a esta tarefa');
       }
       return userRelation;
-    }
-
-    if (caller.type === 'company') {
-      const companyRelation = relations.find((r) => r.fk_cod_empresa === callerId);
+    } else {
+      const companyRelation = relations.find((r) => r.fk_cod_empresa === caller.empresa_id);
       if (!companyRelation) {
         throw new ForbiddenException('Esta tarefa não pertence à sua empresa');
       }
       return companyRelation;
     }
-
-    throw new ForbiddenException('Tipo de usuário inválido');
   }
 
   async create(
@@ -55,11 +53,14 @@ export class TasksService {
     },
     caller: any,
   ) {
-    if (caller.type !== 'company') {
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem criar tarefas');
     }
 
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.empresa_id;
 
     if (!data.fk_id_func) {
       throw new BadRequestException('É necessário informar o funcionário (fk_id_func) para atribuir a tarefa');
@@ -67,14 +68,14 @@ export class TasksService {
 
     // Validar se o funcionário existe e pertence à mesma empresa
     const employee = await this.userRepository.findOne({
-      where: { pk_id_func: data.fk_id_func },
+      where: { id: data.fk_id_func },
     });
 
     if (!employee) {
       throw new NotFoundException('Funcionário não encontrado');
     }
 
-    if (employee.fk_cod_empresa !== callerId) {
+    if (employee.empresa_id !== callerId) {
       throw new ForbiddenException('Este funcionário não pertence à sua empresa');
     }
 
@@ -138,8 +139,11 @@ export class TasksService {
       throw new NotFoundException(`Tarefa com ID ${taskId} não encontrada`);
     }
 
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
     // Regras de transição de status para funcionários
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       const currentStatus = task.status_tarefa;
       const isAllowed =
         (currentStatus === 3 && status === 2) || // Pendente -> Em andamento
@@ -150,10 +154,8 @@ export class TasksService {
           `Transição de status inválida para funcionários (de ${currentStatus} para ${status})`,
         );
       }
-    }
-
-    // Regras de transição para Empresa (Opção B)
-    if (caller.type === 'company') {
+    } else {
+      // Regras de transição para Empresa
       if (status === 1) {
         throw new ForbiddenException(
           'Empresas não podem marcar tarefas diretamente como concluídas (evita concessão imprópria de pontos)',
@@ -173,7 +175,7 @@ export class TasksService {
 
   async findOneUser(userId: number) {
     const user = await this.userRepository.findOne({
-      where: { pk_id_func: userId },
+      where: { id: userId },
     });
     if (!user) {
       throw new NotFoundException(`Funcionário com ID ${userId} não encontrado`);
@@ -197,7 +199,10 @@ export class TasksService {
   }
 
   async remove(id: number, caller: any) {
-    if (caller.type !== 'company') {
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem excluir tarefas');
     }
 

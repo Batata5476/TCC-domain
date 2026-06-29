@@ -1,22 +1,22 @@
-import { IsEmail, IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateCompanyDto {
   @IsString()
   @IsNotEmpty()
-  nome_empresa: string;
-
-  @IsString()
-  @Matches(/^\d{14}$/, { message: 'CNPJ deve conter apenas 14 números' })
-  cnpj_empresa: string;
-
-  @IsEmail()
-  email_empresa: string;
+  nome: string;
 
   @IsString()
   @IsNotEmpty()
-  tipo_empresa: string;
+  cnpj: string;
+
+  @IsEmail()
+  email: string;
 
   @IsString()
-  @MinLength(6)
+  @IsOptional()
+  tipo_empresa?: string;
+
+  @IsString()
+  @MinLength(8)
   senha_empresa: string;
 }

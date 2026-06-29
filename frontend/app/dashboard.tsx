@@ -600,15 +600,15 @@ export default function Dashboard() {
                 <Text style={styles.inputLabel}>Atribuir Colaborador</Text>
                 <ScrollView style={styles.employeeList} nestedScrollEnabled>
                   {employees.map((emp) => {
-                    const sel = selectedEmployeeId === emp.pk_id_func;
+                    const sel = selectedEmployeeId === emp.id;
                     return (
                       <TouchableOpacity
-                        key={emp.pk_id_func}
+                        key={emp.id}
                         style={[styles.employeeRow, sel && styles.employeeRowActive]}
-                        onPress={() => setSelectedEmployeeId(emp.pk_id_func)}
+                        onPress={() => setSelectedEmployeeId(emp.id)}
                       >
                         <Text style={[styles.employeeText, sel && styles.employeeTextActive]}>
-                          {emp.nome_func}
+                          {emp.nome}
                         </Text>
                         {sel && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
                       </TouchableOpacity>

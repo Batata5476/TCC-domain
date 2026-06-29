@@ -11,7 +11,7 @@ export class TasksController {
   @Get('my-tasks')
   async findMyTasks(@Req() req) {
     // Para funcionários (type: 'user')
-    return this.tasksService.findAllByEmployee(req.user.userId);
+    return this.tasksService.findAllByEmployee(req.user.sub);
   }
 
   @Post()

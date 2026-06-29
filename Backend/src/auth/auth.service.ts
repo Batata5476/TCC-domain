@@ -1,12 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { LoginUserDto } from './dto/login-user.dto';
-import { LoginCompanyDto } from './dto/login-company.dto';
+import { LoginDto } from './dto/login.dto';
+import { ValidateFirstAccessDto } from './dto/validate-first-access.dto';
+import { ActivateFirstAccessDto } from './dto/activate-first-access.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { Company } from '../company/entities/company.entity';
 import { User } from '../users/entities/user.entity';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class AuthService {
@@ -16,88 +19,338 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService,
+    private auditService: AuditService,
   ) {}
 
-  async loginUser(dto: LoginUserDto) {
-    const { cpf, senha } = dto;
+  private generateRandomCode(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      if (i === 4) code += '-';
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
 
-    const cleanCpf = cpf.replace(/\D/g, '');
+  private validatePasswordPolicy(password: string) {
+    const minLength = password.length >= 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(password);
 
-    const user = await this.userRepository
-      .createQueryBuilder('user')
-      .where('user.cpf_func = :cpf', { cpf: cleanCpf })
-      .addSelect('user.senha_func')
-      .getOne();
+    if (!minLength || !hasUpper || !hasLower || !hasNumber || !hasSymbol) {
+      throw new BadRequestException(
+        'A senha deve conter no mínimo 8 caracteres, incluindo uma letra maiúscula, uma minúscula, um número e um caractere especial.',
+      );
+    }
+  }
+
+  async login(dto: LoginDto, ip?: string, userAgent?: string) {
+    const { login, senha } = dto;
+    const cleanLogin = login.replace(/\D/g, '');
+
+    let user: User | null = null;
+    let isCompanyMaster = false;
+
+    // 1. Se for CNPJ de empresa (14 dígitos)
+    if (cleanLogin.length === 14) {
+      const company = await this.companyRepository.findOne({
+        where: { cnpj: cleanLogin },
+      });
+
+      if (company) {
+        // Encontra o usuário Administrador Master para essa empresa
+        user = await this.userRepository
+          .createQueryBuilder('user')
+          .leftJoinAndSelect('user.permissions', 'permissions')
+          .leftJoinAndSelect('user.role', 'role')
+          .leftJoinAndSelect('role.permissions', 'role_permissions')
+          .where('user.empresa_id = :empresaId', { empresaId: company.id })
+          .andWhere('role.nome = :roleName', { roleName: 'Administrador Master' })
+          .addSelect('user.senha')
+          .getOne();
+
+        if (user) {
+          isCompanyMaster = true;
+        }
+      }
+    }
+
+    // 2. Se não encontrou como empresa, procura por CPF (11 dígitos) ou E-mail
+    if (!user) {
+      let query = this.userRepository
+        .createQueryBuilder('user')
+        .leftJoinAndSelect('user.permissions', 'permissions')
+        .leftJoinAndSelect('user.role', 'role')
+        .leftJoinAndSelect('role.permissions', 'role_permissions');
+
+      if (cleanLogin.length === 11) {
+        query = query.where('user.cpf = :login', { login: cleanLogin });
+      } else {
+        query = query.where('user.email = :login', { login: login.trim() });
+      }
+
+      user = await query.addSelect('user.senha').getOne();
+    }
 
     if (!user) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    const isPasswordValid = await bcrypt.compare(senha, user.senha_func);
+    // Verificar status
+    if (user.status === 'BLOCKED' || user.status === 'DISABLED' || user.status === 'DELETED') {
+      throw new UnauthorizedException('Sua conta está desativada ou bloqueada. Contate o administrador.');
+    }
 
+    // Verificar se primeiro acesso é requerido
+    if (user.primeiro_acesso) {
+      throw new UnauthorizedException('PRIMEIRO_ACESSO_REQUERIDO');
+    }
+
+    const isPasswordValid = await bcrypt.compare(senha, user.senha);
     if (!isPasswordValid) {
+      // Registra falha de login
+      await this.auditService.log({
+        usuario_id: user.id,
+        empresa_id: user.empresa_id,
+        acao: 'LOGIN_FAILURE',
+        entidade: 'User',
+        entidade_id: user.id,
+        ip,
+        user_agent: userAgent,
+        detalhes: 'Senha incorreta para login unificado',
+      });
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
+    // Coleta todas as permissões (permissões da role + permissões customizadas adicionais)
+    const rolePermissions = user.role?.permissions?.map((p) => p.nome) || [];
+    const customPermissions = user.permissions?.map((p) => p.nome) || [];
+    const allPermissions = Array.from(new Set([...rolePermissions, ...customPermissions]));
+
     const payload = {
-      sub: user.pk_id_func,
-      cpf: user.cpf_func,
-      type: 'user' as const,
+      sub: user.id,
+      empresa_id: user.empresa_id,
+      role: user.role?.nome || 'Funcionário',
+      permissions: allPermissions,
     };
 
     const token = this.jwtService.sign(payload);
+
+    // Registrar auditoria de login
+    await this.auditService.log({
+      usuario_id: user.id,
+      empresa_id: user.empresa_id,
+      acao: 'LOGIN_SUCCESS',
+      entidade: 'User',
+      entidade_id: user.id,
+      ip,
+      user_agent: userAgent,
+      detalhes: `Usuário autenticado com sucesso. Role: ${user.role?.nome || 'Funcionário'}`,
+    });
 
     return {
       status: 'success',
       message: 'Login realizado com sucesso',
       data: {
         access_token: token,
+        type: isCompanyMaster ? 'company' : 'user',
         user: {
-          id: user.pk_id_func,
-          nome: user.nome_func,
-          email: user.email_func,
+          id: user.id,
+          nome: user.nome,
+          email: user.email,
+          role: user.role?.nome || 'Funcionário',
+          permissions: allPermissions,
         },
       },
     };
   }
 
-  async loginCompany(dto: LoginCompanyDto) {
-    const { cnpj, senha } = dto;
+  async validateFirstAccess(dto: ValidateFirstAccessDto) {
+    const { activation_code, token } = dto;
 
-    const cleanCnpj = cnpj.replace(/\D/g, '');
-
-    const company = await this.companyRepository
-      .createQueryBuilder('company')
-      .where('company.cnpj_empresa = :cnpj', { cnpj: cleanCnpj })
-      .addSelect('company.senha_empresa')
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.token')
+      .where('user.activation_code = :activation_code', { activation_code })
       .getOne();
 
-    if (!company) {
-      throw new UnauthorizedException('Credenciais inválidas');
+
+    if (!user) {
+      throw new UnauthorizedException('Código de ativação ou token inválido');
     }
 
-    const isPasswordValid = await bcrypt.compare(
-      senha,
-      company.senha_empresa,
-    );
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Credenciais inválidas');
+    if (user.status === 'DELETED' || user.status === 'BLOCKED') {
+      throw new UnauthorizedException('Este usuário está bloqueado ou removido');
     }
 
-    const payload = {
-      sub: company.pk_cod_empresa,
-      cnpj: company.cnpj_empresa,
-      type: 'company' as const,
-    };
+    if (user.token_expiracao && new Date() > user.token_expiracao) {
+      throw new UnauthorizedException('Este token expirou. Solicite um novo à empresa.');
+    }
 
-    const token = this.jwtService.sign(payload);
+    if (!user.token) {
+      throw new UnauthorizedException('Nenhum token ativo encontrado para este código');
+    }
+
+    const isTokenValid = await bcrypt.compare(token, user.token);
+    if (!isTokenValid) {
+      throw new UnauthorizedException('Código de ativação ou token inválido');
+    }
 
     return {
       status: 'success',
-      message: 'Login realizado com sucesso',
+      message: 'Token válido. Prossiga para redefinir a senha.',
+    };
+  }
+
+  async activateFirstAccess(dto: ActivateFirstAccessDto, ip?: string, userAgent?: string) {
+    const { activation_code, token, senha } = dto;
+
+    this.validatePasswordPolicy(senha);
+
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'role_permissions')
+      .leftJoinAndSelect('user.permissions', 'permissions')
+      .addSelect('user.token')
+      .where('user.activation_code = :activation_code', { activation_code })
+      .getOne();
+
+    if (!user) {
+      throw new UnauthorizedException('Código de ativação ou token inválido');
+    }
+
+    if (user.status === 'DELETED' || user.status === 'BLOCKED') {
+      throw new UnauthorizedException('Este usuário está bloqueado ou removido');
+    }
+
+    if (user.token_expiracao && new Date() > user.token_expiracao) {
+      throw new UnauthorizedException('Token expirou');
+    }
+
+    if (!user.token) {
+      throw new UnauthorizedException('Token inválido');
+    }
+
+    const isTokenValid = await bcrypt.compare(token, user.token);
+    if (!isTokenValid) {
+      throw new UnauthorizedException('Código de ativação ou token inválido');
+    }
+
+    // Atualiza senha e status do usuário
+    user.senha = await bcrypt.hash(senha, 10);
+    user.primeiro_acesso = false;
+    user.token = null;
+    user.token_expiracao = null;
+    user.status = 'ACTIVE';
+
+    const savedUser = await this.userRepository.save(user);
+
+    // Auditoria de ativação
+    await this.auditService.log({
+      usuario_id: savedUser.id,
+      empresa_id: savedUser.empresa_id,
+      acao: 'PASSWORD_RESET_FIRST_ACCESS',
+      entidade: 'User',
+      entidade_id: savedUser.id,
+      ip,
+      user_agent: userAgent,
+      detalhes: 'Senha cadastrada e conta ativada no primeiro acesso',
+    });
+
+    // Login direto
+    const rolePermissions = savedUser.role?.permissions?.map((p) => p.nome) || [];
+    const customPermissions = savedUser.permissions?.map((p) => p.nome) || [];
+    const allPermissions = Array.from(new Set([...rolePermissions, ...customPermissions]));
+
+    const payload = {
+      sub: savedUser.id,
+      empresa_id: savedUser.empresa_id,
+      role: savedUser.role?.nome || 'Funcionário',
+      permissions: allPermissions,
+    };
+
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      status: 'success',
+      message: 'Senha cadastrada e conta ativada com sucesso',
       data: {
-        access_token: token,
+        access_token: accessToken,
+        type: savedUser.role?.nome === 'Administrador Master' ? 'company' : 'user',
+        user: {
+          id: savedUser.id,
+          nome: savedUser.nome,
+          email: savedUser.email,
+          role: savedUser.role?.nome || 'Funcionário',
+          permissions: allPermissions,
+        },
+      },
+    };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto, ip?: string, userAgent?: string) {
+    const { email } = dto;
+
+    const user = await this.userRepository.findOne({
+      where: { email: email.trim() },
+    });
+
+    // Se o usuário não existir, retornamos sucesso genérico por motivos de segurança
+    if (!user) {
+      return {
+        status: 'success',
+        message: 'Se o e-mail estiver cadastrado, as instruções foram enviadas.',
+      };
+    }
+
+    if (user.status === 'DELETED' || user.status === 'BLOCKED') {
+      throw new BadRequestException('Esta conta está suspensa ou inativa.');
+    }
+
+    const rawToken = this.generateRandomCode(); // ex: F7KQ-29MA
+    const hashedToken = await bcrypt.hash(rawToken, 10);
+    const code = this.generateRandomCode(); // ex: A82M-ZQ91
+
+    user.token = hashedToken;
+    user.activation_code = code;
+    // Expira em 48 horas
+    user.token_expiracao = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+    await this.userRepository.save(user);
+
+    // Auditoria de solicitação de recuperação
+    await this.auditService.log({
+      usuario_id: user.id,
+      empresa_id: user.empresa_id,
+      acao: 'PASSWORD_RESET_REQUESTED',
+      entidade: 'User',
+      entidade_id: user.id,
+      ip,
+      user_agent: userAgent,
+      detalhes: `Solicitação de redefinição de senha gerada. Código de Ativação: ${code}`,
+    });
+
+    // Simulação de envio de e-mail (escreve no log do console/terminal)
+    console.log('\n---------------- MOCK EMAIL DE RECUPERAÇÃO ----------------');
+    console.log(`Para: ${user.email}`);
+    console.log(`Olá, ${user.nome}! Você solicitou a redefinição de sua senha.`);
+    console.log(`Use as informações abaixo para redefinir sua senha:`);
+    console.log(`Código de ativação: ${code}`);
+    console.log(`Token: ${rawToken}`);
+    console.log(`Este código expira em 48 horas.`);
+    console.log(`Link direto: http://localhost:8081/redefinir-senha?code=${code}&token=${rawToken}`);
+    console.log('------------------------------------------------------------\n');
+
+    return {
+      status: 'success',
+      message: 'Se o e-mail estiver cadastrado, as instruções foram enviadas.',
+      // Retornamos os dados em ambiente de desenvolvimento para facilitar o teste local
+      _dev_: {
+        code,
+        token: rawToken,
       },
     };
   }

@@ -25,7 +25,9 @@ export class MeetingsService {
   ) {}
 
   private async validateMeetingAccess(meetingId: number, caller: any): Promise<Meeting> {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
     const meeting = await this.meetingRepository.findOne({
       where: { pk_id_reuniao: meetingId },
@@ -40,16 +42,14 @@ export class MeetingsService {
       relations: ['funcionario'],
     });
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       const isParticipant = relations.some((r) => r.fk_id_func === callerId);
       if (!isParticipant) {
         throw new ForbiddenException('Voce nao participa desta reuniao');
       }
-    }
-
-    if (caller.type === 'company') {
+    } else {
       const belongsToCompany = relations.some(
-        (r) => r.funcionario && r.funcionario.fk_cod_empresa === callerId,
+        (r) => r.funcionario && r.funcionario.empresa_id === caller.empresa_id,
       );
       if (!belongsToCompany) {
         throw new ForbiddenException('Esta reuniao nao pertence a funcionarios da sua empresa');
@@ -70,19 +70,19 @@ export class MeetingsService {
     }
 
     const participants = await this.userRepository.find({
-      where: { pk_id_func: In(uniqueParticipantIds) },
+      where: { id: In(uniqueParticipantIds) },
     });
 
     if (participants.length !== uniqueParticipantIds.length) {
-      const foundIds = new Set(participants.map((p) => p.pk_id_func));
+      const foundIds = new Set(participants.map((p) => p.id));
       const missingId = uniqueParticipantIds.find((id) => !foundIds.has(id));
       throw new NotFoundException(`Funcionario convidado com ID ${missingId} nao encontrado`);
     }
 
-    const externalParticipant = participants.find((p) => p.fk_cod_empresa !== companyId);
+    const externalParticipant = participants.find((p) => p.empresa_id !== companyId);
     if (externalParticipant) {
       throw new ForbiddenException(
-        `O funcionario ${externalParticipant.nome_func} (ID: ${externalParticipant.pk_id_func}) pertence a outra empresa`,
+        `O funcionario ${externalParticipant.nome} (ID: ${externalParticipant.id}) pertence a outra empresa`,
       );
     }
 
@@ -90,15 +90,16 @@ export class MeetingsService {
   }
 
   async create(createMeetingDto: CreateMeetingDto, caller: any) {
-    const callerId = caller.userId || caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    if (caller.type !== 'company') {
+    if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem criar reunioes');
     }
 
     const participantIds = await this.validateParticipantsBelongToCompany(
       createMeetingDto.participants,
-      callerId,
+      caller.empresa_id,
     );
 
     const savedMeeting = await this.dataSource.transaction(async (manager) => {
@@ -130,9 +131,11 @@ export class MeetingsService {
   }
 
   async findAll(caller: any) {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       const relations = await this.meetingParticipantRepository.find({
         where: { fk_id_func: callerId },
         relations: ['reuniao'],
@@ -142,13 +145,11 @@ export class MeetingsService {
         status: 'success',
         data: meetings,
       };
-    }
-
-    if (caller.type === 'company') {
+    } else {
       const meetings = await this.meetingRepository.createQueryBuilder('meeting')
         .innerJoin(MeetingParticipant, 'mp', 'mp.fk_id_reuniao = meeting.pk_id_reuniao')
-        .innerJoin(User, 'user', 'mp.fk_id_func = user.pk_id_func')
-        .where('user.fk_cod_empresa = :companyId', { companyId: callerId })
+        .innerJoin(User, 'user', 'mp.fk_id_func = user.id')
+        .where('user.empresa_id = :companyId', { companyId: caller.empresa_id })
         .orderBy('meeting.data_reuniao', 'DESC')
         .getMany();
 
@@ -166,8 +167,6 @@ export class MeetingsService {
         data: uniqueMeetings,
       };
     }
-
-    throw new ForbiddenException('Tipo de usuario invalido');
   }
 
   async findOne(id: number, caller: any) {
@@ -179,19 +178,14 @@ export class MeetingsService {
   }
 
   async update(id: number, updateDto: UpdateMeetingDto, caller: any) {
-    if (caller.type !== 'company') {
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem atualizar reunioes');
     }
 
-    await this.validateMeetingAccess(id, caller);
-
-    const meeting = await this.meetingRepository.findOne({
-      where: { pk_id_reuniao: id },
-    });
-
-    if (!meeting) {
-      throw new NotFoundException(`Reuniao com ID ${id} nao encontrada`);
-    }
+    const meeting = await this.validateMeetingAccess(id, caller);
 
     if (updateDto.data_reuniao !== undefined) {
       meeting.data_reuniao = new Date(updateDto.data_reuniao);
@@ -207,10 +201,9 @@ export class MeetingsService {
     }
 
     if (updateDto.participants !== undefined) {
-      const companyId = caller.userId || caller.sub;
       const participantIds = await this.validateParticipantsBelongToCompany(
         updateDto.participants,
-        companyId,
+        caller.empresa_id,
       );
 
       const updated = await this.dataSource.transaction(async (manager) => {
@@ -244,19 +237,14 @@ export class MeetingsService {
   }
 
   async remove(id: number, caller: any) {
-    if (caller.type !== 'company') {
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+
+    if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem excluir reunioes');
     }
 
-    await this.validateMeetingAccess(id, caller);
-
-    const meeting = await this.meetingRepository.findOne({
-      where: { pk_id_reuniao: id },
-    });
-
-    if (!meeting) {
-      throw new NotFoundException(`Reuniao com ID ${id} nao encontrada`);
-    }
+    const meeting = await this.validateMeetingAccess(id, caller);
 
     await this.meetingRepository.remove(meeting);
 

@@ -16,7 +16,9 @@ export class WorkService {
   ) {}
 
   private async validateWorkAccess(workId: number, caller: any): Promise<Work> {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
     const work = await this.workRepository.findOne({
       where: { pk_id_ponto: workId },
@@ -26,18 +28,16 @@ export class WorkService {
       throw new NotFoundException(`Registro de ponto com ID ${workId} nao encontrado`);
     }
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       if (work.fk_id_func !== callerId) {
         throw new ForbiddenException('Voce nao possui acesso a este registro de ponto');
       }
-    }
-
-    if (caller.type === 'company') {
+    } else {
       const employee = await this.userRepository.findOne({
-        where: { pk_id_func: work.fk_id_func },
+        where: { id: work.fk_id_func },
       });
 
-      if (!employee || employee.fk_cod_empresa !== callerId) {
+      if (!employee || employee.empresa_id !== caller.empresa_id) {
         throw new ForbiddenException('Este registro de ponto nao pertence a um funcionario da sua empresa');
       }
     }
@@ -46,9 +46,11 @@ export class WorkService {
   }
 
   async findAll(caller: any) {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       const registros = await this.workRepository.find({
         where: { fk_id_func: callerId },
         order: { data_ponto: 'DESC', entrada: 'DESC' },
@@ -58,12 +60,10 @@ export class WorkService {
         status: 'success',
         data: registros,
       };
-    }
-
-    if (caller.type === 'company') {
+    } else {
       const registros = await this.workRepository.createQueryBuilder('work')
-        .innerJoin(User, 'user', 'work.fk_id_func = user.pk_id_func')
-        .where('user.fk_cod_empresa = :companyId', { companyId: callerId })
+        .innerJoin(User, 'user', 'work.fk_id_func = user.id')
+        .where('user.empresa_id = :companyId', { companyId: caller.empresa_id })
         .orderBy('work.data_ponto', 'DESC')
         .addOrderBy('work.entrada', 'DESC')
         .getMany();
@@ -73,8 +73,6 @@ export class WorkService {
         data: registros,
       };
     }
-
-    throw new ForbiddenException('Tipo de usuario invalido');
   }
 
   async findOne(id: number, caller: any) {
@@ -87,11 +85,11 @@ export class WorkService {
   }
 
   async create(createWorkDto: CreateWorkDto, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionarios podem criar registros de ponto');
     }
 
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
 
     const work = this.workRepository.create({
       entrada: createWorkDto.entrada,
@@ -111,7 +109,7 @@ export class WorkService {
   }
 
   async update(id: number, updateDto: UpdateWorkDto, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionarios podem atualizar seus registros de ponto');
     }
 
@@ -137,7 +135,7 @@ export class WorkService {
   }
 
   async remove(id: number, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionarios podem excluir seus registros de ponto');
     }
 

@@ -32,7 +32,7 @@ export default function InserirTokenEmpresa() {
       <View style={styles.card}>
         <Text style={styles.label}>Token</Text>
         <TextInput
-          placeholder="Value"
+          placeholder="Token JWT gerado"
           value={token}
           onChangeText={setToken}
           autoCapitalize="none"

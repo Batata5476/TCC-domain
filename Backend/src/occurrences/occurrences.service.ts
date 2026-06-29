@@ -16,7 +16,9 @@ export class OccurrencesService {
   ) {}
 
   private async validateOccurrenceAccess(occurrenceId: number, caller: any): Promise<Occurrence> {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
     const occurrence = await this.occurrenceRepository.findOne({
       where: { pk_id_his_medico: occurrenceId },
@@ -26,18 +28,16 @@ export class OccurrencesService {
       throw new NotFoundException(`Registro médico com ID ${occurrenceId} não encontrado`);
     }
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       if (occurrence.fk_id_func !== callerId) {
         throw new ForbiddenException('Você não possui acesso a este registro médico');
       }
-    }
-
-    if (caller.type === 'company') {
+    } else {
       const employee = await this.userRepository.findOne({
-        where: { pk_id_func: occurrence.fk_id_func },
+        where: { id: occurrence.fk_id_func },
       });
 
-      if (!employee || employee.fk_cod_empresa !== callerId) {
+      if (!employee || employee.empresa_id !== caller.empresa_id) {
         throw new ForbiddenException('Este registro médico não pertence a um funcionário da sua empresa');
       }
     }
@@ -46,11 +46,11 @@ export class OccurrencesService {
   }
 
   async create(createOccurrenceDto: CreateOccurrenceDto, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionários podem registrar ocorrências médicas');
     }
 
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
 
     const occurrence = this.occurrenceRepository.create({
       atestado_func: createOccurrenceDto.atestado_func,
@@ -68,9 +68,11 @@ export class OccurrencesService {
   }
 
   async findAll(caller: any) {
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
+    const isCompanyAdmin =
+      caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    if (caller.type === 'user') {
+    if (!isCompanyAdmin) {
       const occurrences = await this.occurrenceRepository.find({
         where: { fk_id_func: callerId },
         order: { pk_id_his_medico: 'DESC' },
@@ -79,12 +81,10 @@ export class OccurrencesService {
         status: 'success',
         data: occurrences,
       };
-    }
-
-    if (caller.type === 'company') {
+    } else {
       const occurrences = await this.occurrenceRepository.createQueryBuilder('occurrence')
-        .innerJoin(User, 'user', 'occurrence.fk_id_func = user.pk_id_func')
-        .where('user.fk_cod_empresa = :companyId', { companyId: callerId })
+        .innerJoin(User, 'user', 'occurrence.fk_id_func = user.id')
+        .where('user.empresa_id = :companyId', { companyId: caller.empresa_id })
         .orderBy('occurrence.pk_id_his_medico', 'DESC')
         .getMany();
 
@@ -93,8 +93,6 @@ export class OccurrencesService {
         data: occurrences,
       };
     }
-
-    throw new ForbiddenException('Tipo de usuário inválido');
   }
 
   async findOne(id: number, caller: any) {
@@ -106,7 +104,7 @@ export class OccurrencesService {
   }
 
   async update(id: number, updateDto: UpdateOccurrenceDto, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionários podem atualizar seus registros médicos');
     }
 
@@ -129,7 +127,7 @@ export class OccurrencesService {
   }
 
   async remove(id: number, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionários podem excluir seus registros médicos');
     }
 

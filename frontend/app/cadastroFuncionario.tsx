@@ -1,28 +1,17 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Clipboard,
+} from "react-native";
 import { useRouter } from "expo-router";
-import { API_URL } from "../services/config";
-
-type InputProps = {
-  placeholder: string;
-  secureTextEntry?: boolean;
-  value: string;
-  onChangeText: (text: string) => void;
-  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad";
-};
-
-function Input({ placeholder, secureTextEntry, value, onChangeText, keyboardType }: InputProps) {
-  return (
-    <TextInput
-      placeholder={placeholder}
-      secureTextEntry={secureTextEntry}
-      value={value}
-      onChangeText={onChangeText}
-      keyboardType={keyboardType}
-      style={styles.input}
-    />
-  );
-}
+import { authenticatedFetch } from "../services/api";
 
 export default function CadastroFuncionario() {
   const router = useRouter();
@@ -30,101 +19,329 @@ export default function CadastroFuncionario() {
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
-  const [setor, setSetor] = useState("");
   const [cargo, setCargo] = useState("");
-  const [codEmpresa, setCodEmpresa] = useState("");
-  const [senha, setSenha] = useState("");
+  const [setorId, setSetorId] = useState("");
+  const [roleName, setRoleName] = useState("Funcionário"); // 'Funcionário' ou 'Administrador'
+  const [loading, setLoading] = useState(false);
+
+  // Exibição pós-cadastro
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    code: string;
+    token: string;
+  } | null>(null);
 
   const handleRegister = async () => {
-    if (!nome || !cpf || !email || !setor || !cargo || !codEmpresa) {
-      Alert.alert("Erro", "Por favor, preencha todos os campos.");
+    if (!nome.trim() || !cpf.trim() || !email.trim() || !cargo.trim() || !setorId.trim()) {
+      Alert.alert("Erro", "Por favor, preencha todos os campos obrigatórios.");
       return;
     }
 
+    setLoading(true);
+    setCreatedCredentials(null);
+
     try {
-      const response = await fetch(`${API_URL}/users`, {
+      const response = await authenticatedFetch("/users", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
-          nome_func: nome,
-          cpf_func: cpf,
-          email_func: email,
-          senha_func: senha,
-          fk_id_setor: Number(setor),
-          fk_id_cargo: Number(cargo),
-          fk_cod_empresa: Number(codEmpresa),
+          nome: nome.trim(),
+          cpf: cpf.replace(/\D/g, ""),
+          email: email.trim(),
+          cargo: cargo.trim(),
+          setor_id: Number(setorId),
+          role_name: roleName,
+          permissions: [], // pode ser customizado depois
         }),
       });
 
-      const data = await response.json();
+      const body = await response.json();
 
       if (response.ok) {
-        Alert.alert("Sucesso", "Funcionário cadastrado com sucesso!");
-        router.push("/loginFuncionario");
+        Alert.alert("Sucesso 🎉", "Funcionário pré-cadastrado com sucesso!");
+        // Em ambiente de desenvolvimento/teste, o backend retorna as credenciais brutas em _dev_
+        if (body._dev_) {
+          setCreatedCredentials(body._dev_);
+        }
+        // Limpar formulário
+        setNome("");
+        setCpf("");
+        setEmail("");
+        setCargo("");
+        setSetorId("");
       } else {
-        Alert.alert("Erro", data.message || "Falha ao cadastrar funcionário.");
+        Alert.alert("Erro", body.message || "Falha ao cadastrar funcionário.");
       }
     } catch (error) {
       console.error(error);
       Alert.alert("Erro", "Não foi possível conectar ao servidor.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    Clipboard.setString(text);
+    Alert.alert("Copiado!", "Copiado para a área de transferência.");
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Cadastro Funcionário</Text>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <Text style={styles.title}>Cadastrar Novo Colaborador</Text>
+      <Text style={styles.subtitle}>
+        O colaborador receberá um convite por e-mail com as credenciais de primeiro acesso.
+      </Text>
 
-      <Input placeholder="Nome Completo" value={nome} onChangeText={setNome} />
-      <Input placeholder="CPF" value={cpf} onChangeText={setCpf} keyboardType="numeric" />
-      <Input placeholder="E-mail" value={email} onChangeText={setEmail} keyboardType="email-address" />
-      <Input placeholder="ID do Setor (Número)" value={setor} onChangeText={setSetor} keyboardType="numeric" />
-      <Input placeholder="ID do Cargo (Número)" value={cargo} onChangeText={setCargo} keyboardType="numeric" />
-      <Input placeholder="Código da Empresa" value={codEmpresa} onChangeText={setCodEmpresa} keyboardType="numeric" />
-      <Input placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry={true} />
+      <View style={styles.form}>
+        <Text style={styles.label}>Nome Completo *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ex: João Silva"
+          value={nome}
+          onChangeText={setNome}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Cadastrar</Text>
-      </TouchableOpacity>
+        <Text style={styles.label}>CPF *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Apenas números"
+          keyboardType="numeric"
+          value={cpf}
+          onChangeText={setCpf}
+        />
 
-      <TouchableOpacity 
+        <Text style={styles.label}>E-mail *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ex: joao@empresa.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+        />
+
+        <Text style={styles.label}>Cargo *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ex: Desenvolvedor"
+          value={cargo}
+          onChangeText={setCargo}
+        />
+
+        <Text style={styles.label}>ID do Setor (Número) *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ex: 95"
+          keyboardType="numeric"
+          value={setorId}
+          onChangeText={setSetorId}
+        />
+
+        <Text style={styles.label}>Tipo de Perfil *</Text>
+        <View style={styles.roleContainer}>
+          <TouchableOpacity
+            style={[styles.roleBtn, roleName === "Funcionário" && styles.roleBtnActive]}
+            onPress={() => setRoleName("Funcionário")}
+          >
+            <Text style={[styles.roleText, roleName === "Funcionário" && styles.roleTextActive]}>
+              Funcionário
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.roleBtn, roleName === "Administrador" && styles.roleBtnActive]}
+            onPress={() => setRoleName("Administrador")}
+          >
+            <Text style={[styles.roleText, roleName === "Administrador" && styles.roleTextActive]}>
+              Administrador
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.disabled]}
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Cadastrar Colaborador</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Credenciais Geradas para Teste Fácil */}
+      {createdCredentials && (
+        <View style={styles.credentialsCard}>
+          <Text style={styles.credentialsTitle}>🔑 Credenciais de Primeiro Acesso (Ambiente de Teste):</Text>
+          
+          <View style={styles.credRow}>
+            <Text style={styles.credLabel}>Código de Ativação:</Text>
+            <TouchableOpacity onPress={() => copyToClipboard(createdCredentials.code)}>
+              <Text style={styles.credValue}>{createdCredentials.code} 📋</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.credRow}>
+            <Text style={styles.credLabel}>Token:</Text>
+            <TouchableOpacity onPress={() => copyToClipboard(createdCredentials.token)}>
+              <Text style={styles.credValue}>{createdCredentials.token} 📋</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.credentialsHint}>
+            Dica: Copie estes dados e utilize a opção "Primeiro acesso" na tela inicial para definir a senha do funcionário.
+          </Text>
+        </View>
+      )}
+
+      <TouchableOpacity
         style={styles.secondaryButton}
-        onPress={() => router.push("/loginFuncionario")}
+        onPress={() => router.replace("/dashboard")}
       >
-        <Text style={styles.secondaryButtonText}>Voltar</Text>
+        <Text style={styles.secondaryButtonText}>Voltar ao Dashboard</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  title: { textAlign: "center", marginBottom: 20 },
-  input: {
+  container: {
+    flexGrow: 1,
+    padding: 24,
     backgroundColor: "#FEFDF9",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 10,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#0f2b3d",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#78909c",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  form: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#f1f3f5",
+    shadowColor: "#0f2b3d",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#546e7a",
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#cfd8dc",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#0f2b3d",
+    backgroundColor: "#fcfdfe",
+    marginBottom: 16,
+  },
+  roleContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+  },
+  roleBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: "#cfd8dc",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  roleBtnActive: {
+    borderColor: "#285A71",
+    backgroundColor: "#f0f6fa",
+  },
+  roleText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#78909c",
+  },
+  roleTextActive: {
+    color: "#285A71",
   },
   button: {
     backgroundColor: "#285A71",
-    padding: 14,
     borderRadius: 10,
-    marginTop: 10,
+    paddingVertical: 14,
+    alignItems: "center",
   },
-  buttonText: { 
-    color: "#ECEFDA", 
-    textAlign: "center" 
+  disabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   secondaryButton: {
-    backgroundColor: "#ECEFDA",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
+    marginTop: 20,
+    paddingVertical: 14,
+    alignItems: "center",
   },
   secondaryButtonText: {
-    textAlign: "center",
     color: "#285A71",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  credentialsCard: {
+    marginTop: 24,
+    backgroundColor: "#ECEFDA",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#d5deb3",
+  },
+  credentialsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#285A71",
+    marginBottom: 12,
+  },
+  credRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  credLabel: {
+    fontSize: 13,
+    color: "#4a5a63",
+    fontWeight: "500",
+  },
+  credValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#285A71",
+    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e1e9c2",
+    overflow: "hidden",
+  },
+  credentialsHint: {
+    fontSize: 11,
+    color: "#5c6d77",
+    marginTop: 10,
+    lineHeight: 16,
   },
 });

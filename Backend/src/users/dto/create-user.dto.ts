@@ -1,34 +1,39 @@
-import { IsString, IsEmail, IsInt, Min, IsNotEmpty, MinLength } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsEmail, IsNotEmpty, IsArray, IsOptional, IsInt } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
-  nome_func: string;
+  nome: string;
 
   @IsString()
   @IsNotEmpty()
-  cpf_func: string;
+  cpf: string;
 
   @IsEmail()
-  email_func: string;
+  @IsNotEmpty()
+  email: string;
 
   @IsString()
-  @MinLength(6)
-  senha_func: string;
+  @IsNotEmpty()
+  cargo: string;
 
-  @Type(() => Number)
   @IsInt()
-  @Min(1)
-  fk_cod_empresa: number;
+  @IsNotEmpty()
+  setor_id: number;
 
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  fk_id_setor: number;
+  @IsString()
+  @IsNotEmpty()
+  role_name: string;
 
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  fk_id_cargo: number;
+  @IsArray()
+  @IsOptional()
+  permissions?: string[];
+
+  @IsString()
+  @IsOptional()
+  telefone?: string;
+
+  @IsString()
+  @IsOptional()
+  foto?: string;
 }

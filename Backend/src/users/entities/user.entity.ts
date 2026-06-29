@@ -1,22 +1,60 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToMany,
+  ManyToOne,
+  JoinTable,
+  JoinColumn,
+} from 'typeorm';
+import { Permission } from './permission.entity';
+import { Role } from './role.entity';
 
-@Entity('info_funcionario')
+@Entity('usuario')
 export class User {
   @PrimaryGeneratedColumn()
-  pk_id_func: number;
+  id: number;
 
   @Column()
-  nome_func: string;
+  empresa_id: number;
+
+  @Column({ nullable: true })
+  role_id: number;
+
+  @Column({ nullable: true })
+  setor_id: number;
+
+  @Column()
+  nome: string;
+
+  @Column({ unique: true })
+  email: string;
 
   /** CPF com NUMERIC(14) no banco — usar sempre como string na aplicação. */
   @Column({ type: 'numeric', precision: 14, scale: 0, unique: true })
-  cpf_func: string;
+  cpf: string;
 
   @Column({ select: false })
-  senha_func: string;
+  senha: string;
 
-  @Column()
-  email_func: string;
+  @Column({ nullable: true })
+  cargo: string;
+
+  // Status: PENDING | ACTIVE | BLOCKED | DISABLED | DELETED
+  @Column({ default: 'PENDING' })
+  status: string;
+
+  @Column({ default: true })
+  primeiro_acesso: boolean;
+
+  @Column({ nullable: true, unique: true })
+  activation_code: string;
+
+  @Column({ nullable: true, select: false })
+  token: string;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  token_expiracao: Date;
 
   @Column({ default: 0 })
   pontos_acumulados: number;
@@ -24,12 +62,22 @@ export class User {
   @Column({ nullable: true })
   foto_func: string;
 
-  @Column()
-  fk_cod_empresa: number;
+  @Column({ nullable: true })
+  foto: string;
 
-  @Column()
-  fk_id_setor: number;
+  @Column({ nullable: true })
+  telefone: string;
 
-  @Column()
-  fk_id_cargo: number;
+  // Relations
+  @ManyToOne(() => Role, { nullable: true, eager: false })
+  @JoinColumn({ name: 'role_id' })
+  role: Role;
+
+  @ManyToMany(() => Permission, { cascade: true, eager: false })
+  @JoinTable({
+    name: 'usuario_permissao',
+    joinColumn: { name: 'usuario_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'permissao_id', referencedColumnName: 'id' },
+  })
+  permissions: Permission[];
 }

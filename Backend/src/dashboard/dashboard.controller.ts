@@ -9,13 +9,13 @@ export class DashboardController {
 
   @Get('company')
   async getCompanyDashboard(@Req() req) {
-    // O id da empresa está no sub do token (PK_COD_EMPRESA)
-    return this.dashboardService.getCompanyDashboard(req.user.userId);
+    // empresa_id identifies the company in the new unified JWT
+    return this.dashboardService.getCompanyDashboard(req.user.empresa_id);
   }
 
   @Get('user')
   async getUserDashboard(@Req() req) {
-    // O id do funcionário está no sub do token (PK_ID_FUNC)
-    return this.dashboardService.getUserDashboard(req.user.userId);
+    // sub is the user's ID in the new unified JWT
+    return this.dashboardService.getUserDashboard(req.user.sub);
   }
 }

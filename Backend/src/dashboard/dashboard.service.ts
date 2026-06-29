@@ -21,7 +21,7 @@ export class DashboardService {
 
   async getUserDashboard(userId: number) {
     const user = await this.userRepository.findOne({
-      where: { pk_id_func: userId },
+      where: { id: userId },
     });
 
     if (!user) {
@@ -47,9 +47,9 @@ export class DashboardService {
     return {
       status: 'success',
       data: {
-        id: user.pk_id_func,
-        nome: user.nome_func,
-        email: user.email_func,
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
         pontos: user.pontos_acumulados || 0,
         foto: user.foto_func,
         tarefasPendentes: pendingTasksCount,
@@ -60,7 +60,7 @@ export class DashboardService {
 
   async getCompanyDashboard(companyId: number) {
     const totalFuncionarios = await this.userRepository.count({
-      where: { fk_cod_empresa: companyId },
+      where: { empresa_id: companyId },
     });
 
     const totalTarefas = await this.taskRepository.count();

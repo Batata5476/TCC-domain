@@ -1,22 +1,19 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity('info_empresa')
+@Entity('empresa')
 export class Company {
   @PrimaryGeneratedColumn()
-  pk_cod_empresa: number;
+  id: number;
 
   @Column({ unique: true })
-  cnpj_empresa: string;
+  cnpj: string;
 
   @Column()
-  nome_empresa: string;
+  nome: string;
 
   @Column()
-  email_empresa: string;
+  email: string;
 
-  @Column()
+  @Column({ nullable: true })
   tipo_empresa: string;
-
-  @Column({ select: false })
-  senha_empresa: string;
 }
