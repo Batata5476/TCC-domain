@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Req } fro
 import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import { CreateTaskPayloadDto } from './dto/create-task-payload.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
@@ -15,12 +16,7 @@ export class TasksController {
   }
 
   @Post()
-  async create(@Req() req, @Body() body: {
-    tipo_tarefa: string;
-    validade_tarefa: string;
-    prioridade_tarefa: number;
-    fk_id_func: number;
-  }) {
+  async create(@Req() req, @Body() body: CreateTaskPayloadDto) {
     return this.tasksService.create({
       tipo_tarefa: body.tipo_tarefa,
       validade_tarefa: new Date(body.validade_tarefa),

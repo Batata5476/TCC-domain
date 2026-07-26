@@ -49,18 +49,19 @@ export class TasksService {
       tipo_tarefa: string;
       validade_tarefa: Date;
       prioridade_tarefa: number;
-      fk_id_func: number;
+      fk_id_func?: number;
     },
     caller: any,
   ) {
     const isCompanyAdmin =
       caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    if (!isCompanyAdmin) {
-      throw new ForbiddenException('Apenas empresas podem criar tarefas');
-    }
-
     const callerId = caller.empresa_id;
+
+    // Se for funcionário, atribui automaticamente a ele mesmo
+    if (!isCompanyAdmin) {
+      data.fk_id_func = caller.sub;
+    }
 
     if (!data.fk_id_func) {
       throw new BadRequestException('É necessário informar o funcionário (fk_id_func) para atribuir a tarefa');
