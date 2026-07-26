@@ -1,10 +1,23 @@
 # Status do Projeto - TCC Coopera
 
-> **Última atualização:** 25/05/2026 — Chat demonstrativo e navegação integrada concluídos.
+> **Última atualização:** 26/07/2026 — Integração e correção do pacote `alteracoes_coopera` (Upload de fotos, DTOs de tarefas, criação de tarefas por colaboradores e correções de backend/frontend).
 
 ---
 
 ## ✅ Mudanças Aplicadas
+
+### 0. Integração `alteracoes_coopera` (26/07/2026 ✅)
+- **Backend (NestJS)**:
+  - DTO `CreateTaskPayloadDto` criado com validações `class-validator`.
+  - Permissão para criação de tarefas por colaboradores (`tasks.service.ts`).
+  - Correção do carregamento de relacionamentos `relations: ['tarefa']` e interpolações em exceções de erro.
+- **Frontend (Expo)**:
+  - Adicionado `expo-image-picker` para upload de foto de perfil.
+  - Atualizado modal da conta para trocar e exibir avatar do usuário via `PATCH /users/:id`.
+  - Correção de codificação UTF-8 (Mojibake) e imports duplicados no `dashboard.tsx`.
+- **Documentação**: Documentação completa disponível em [CHANGELOG_ALTERACOES_COOPERA.md](file:///c:/Users/Amadeu_Turolla/Documents/ATCB/tcc/docs/CHANGELOG_ALTERACOES_COOPERA.md).
+
+---
 
 ### 1. Sincronização e Estrutura (Sessão Anterior)
 - **Git Sync**: Sincronização completa com o repositório remoto `yuuki-p/tcc.git`.
@@ -113,9 +126,10 @@
 - [x] **Mapeamento de Tarefas e Associação** (Concluído)
 - [x] **Tela de Chat Demonstrativa** (Concluído)
 
+- [x] **Tratamento de Erros de Duplicidade (HTTP 409 Conflict)** (Concluído ✅)
+
 ### 1. Tratamento de Erros
-- O backend retorna **HTTP 500** em caso de CNPJ ou CPF duplicado.
-- Deve retornar **HTTP 409 (Conflict)** com mensagem amigável.
+- ✅ O backend agora retorna **HTTP 409 (Conflict)** com mensagem amigável no cadastro caso o CNPJ, CPF ou E-mail já existam no banco.
 
 ### 2. Mapeamento de Entidades Restantes
 | Tabela | Status |
