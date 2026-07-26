@@ -13,12 +13,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons"; // import do Ionicons para os ícones usados aqui no dashboard
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { authenticatedFetch } from "../services/api";
 import { getToken, logout } from "../services/auth";
+import * as ImagePicker from 'expo-image-picker';
+import { API_URL } from '../services/config';
 
-const cooperaLogo = require("../assets/coopera_logo.png"); // import da logo do Coopera para ser usado
+const cooperaLogo = require("../assets/coopera_logo.png");
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -58,7 +60,7 @@ type TaskItem = {
 export default function Dashboard() {
   const router = useRouter();
 
-  // Estados de UI (mantidos do visual original)
+  // Estados de UI
   const [open, setOpen] = useState(true);
   const [otherOpen, setOtherOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false); // controla o menu do botão +
@@ -85,6 +87,9 @@ export default function Dashboard() {
   const [taskPriority, setTaskPriority] = useState(2); // 2 = Normal por padrão
   const [taskDueDate, setTaskDueDate] = useState<"hoje" | "amanha" | "semana">("hoje");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+
+  const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Gera os próximos 7 dias dinamicamente
   useEffect(() => {
@@ -125,6 +130,7 @@ export default function Dashboard() {
         const body = await userRes.json();
         setUserType("user");
         setUserData(body.data);
+        setUserPhoto(body.data?.foto || null);
 
         // Tarefas do funcionário
         const tasksRes = await authenticatedFetch("/tasks/my-tasks");
@@ -173,6 +179,60 @@ export default function Dashboard() {
     router.replace("/");
   };
 
+  const handlePickPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permissão negada", "Precisamos de acesso à sua galeria para trocar a foto.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const base64 = asset.base64;
+    if (!base64) return;
+
+    const mimeType = asset.mimeType || 'image/jpeg';
+    const photoDataUri = `data:${mimeType};base64,${base64}`;
+
+    // Mostra a foto imediatamente
+    setUserPhoto(photoDataUri);
+
+    // Envia pro backend
+    setUploadingPhoto(true);
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_URL}/users/${userData?.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ foto: photoDataUri }),
+      });
+
+      if (response.ok) {
+        Alert.alert("Sucesso", "Foto atualizada com sucesso!");
+      } else {
+        const err = await response.json();
+        Alert.alert("Erro", err.message || "Erro ao salvar foto.");
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Erro", "Não foi possível enviar a foto.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   const handleCompleteTask = async (taskId: number) => {
     try {
       const response = await authenticatedFetch(`/tasks/${taskId}/status`, {
@@ -213,7 +273,11 @@ export default function Dashboard() {
         validade_tarefa: dueDate.toISOString().split("T")[0],
         prioridade_tarefa: taskPriority,
       };
-      if (userType === "company") body.fk_id_func = selectedEmployeeId;
+      if (userType === "company") {
+        body.fk_id_func = selectedEmployeeId;
+      } else if (userData?.id) {
+        body.fk_id_func = userData.id;
+      }
 
       const response = await authenticatedFetch("/tasks", {
         method: "POST",
@@ -237,7 +301,7 @@ export default function Dashboard() {
     }
   };
 
-  // ── Filtragem de tarefas por data e prioridade ────────────────────────────
+  // ── Filtragem de tarefas por data e prioridade ─────────────────────────────
 
   const activeTasks = tasks.filter((t) => {
     if (!t.dueDate) return false;
@@ -247,7 +311,7 @@ export default function Dashboard() {
   const urgentTasks = activeTasks.filter((t) => t.priority === 1);
   const otherTasks = activeTasks.filter((t) => t.priority === 2);
 
-  // ── Renderização de item de tarefa (visual original) ──────────────────────
+  // ── Renderização de item de tarefa ─────────────────────────────────────────
 
   const renderTask = (task: TaskItem) => (
     <View key={task.id} style={styles.taskItem}>
@@ -269,17 +333,16 @@ export default function Dashboard() {
     </View>
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* UI: topo com logo e ícone de conta — visual original mantido */}
+      {/* UI: topo com logo e ícone de conta */}
       <View style={styles.header}>
         <View style={styles.logoBox}>
           <Image source={cooperaLogo} style={styles.logo} resizeMode="contain" />
         </View>
 
-        {/* Ícone de conta: abre painel de informações (não faz logout) */}
         <TouchableOpacity
           style={styles.headerAccountButton}
           activeOpacity={0.8}
@@ -291,7 +354,7 @@ export default function Dashboard() {
         </TouchableOpacity>
       </View>
 
-      {/* UI: seletor horizontal de datas — agora dinâmico */}
+      {/* UI: seletor horizontal de datas dinâmico */}
       <ScrollView
         style={styles.dateScroll}
         horizontal
@@ -326,7 +389,7 @@ export default function Dashboard() {
         })}
       </ScrollView>
 
-      {/* UI: cards de tarefas — visual original mantido */}
+      {/* UI: cards de tarefas */}
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -398,7 +461,7 @@ export default function Dashboard() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* UI: menu que abre acima do botão + */}
+      {/* UI: menu acima do botão + */}
       {menuOpen && (
         <View style={styles.dropupMenu}>
           <TouchableOpacity
@@ -445,7 +508,7 @@ export default function Dashboard() {
         </TouchableOpacity>
       </View>
 
-      {/* ─── Modal: Informações da Conta ──────────────────────────────────── */}
+      {/* ── Modal: Informações da Conta ───────────────────────────────────────── */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -465,10 +528,22 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
 
-            {/* Avatar */}
-            <View style={styles.accountAvatar}>
-              <Ionicons name="person" size={40} color="#FFFFFF" />
-            </View>
+            {/* Avatar com foto */}
+            <TouchableOpacity style={styles.accountAvatar} onPress={handlePickPhoto} disabled={uploadingPhoto}>
+              {userPhoto || userData?.foto ? (
+                <Image
+                  source={{ uri: (userPhoto || userData?.foto) ?? undefined }}
+                  style={{ width: 72, height: 72, borderRadius: 36 }}
+                />
+              ) : (
+                <Ionicons name="person" size={40} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+            {uploadingPhoto && (
+              <Text style={{ textAlign: "center", color: "#285A71", fontSize: 12, marginBottom: 8 }}>
+                Enviando foto...
+              </Text>
+            )}
 
             {/* Dados do usuário */}
             {userType === "user" && userData && (
@@ -495,6 +570,30 @@ export default function Dashboard() {
                     <Text style={styles.accountStatLabel}>Pendentes</Text>
                   </View>
                 </View>
+
+                {/* Botão Trocar Foto */}
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: "#ECEFD9",
+                    paddingVertical: 12,
+                    paddingHorizontal: 24,
+                    borderRadius: 14,
+                    marginTop: 16,
+                    borderWidth: 0.5,
+                    borderColor: "#285A71",
+                  }}
+                  onPress={handlePickPhoto}
+                  disabled={uploadingPhoto}
+                >
+                  <Ionicons name="camera-outline" size={18} color="#285A71" />
+                  <Text style={{ color: "#285A71", fontSize: 14, fontWeight: "700" }}>
+                    Trocar Foto
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -533,7 +632,7 @@ export default function Dashboard() {
         </Pressable>
       </Modal>
 
-      {/* ─── Modal: Criar Tarefa ───────────────────────────────────────────── */}
+      {/* ── Modal: Criar Tarefa ───────────────────────────────────────────────── */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -637,7 +736,7 @@ export default function Dashboard() {
   );
 }
 
-// ─── Estilos (visual original 100% preservado) ───────────────────────────────
+// ─── Estilos ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -664,7 +763,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 28,
     height: 28,
-    tintColor: "#66B300", // aplica a cor verde da logo do Coopera usando tintColor
+    tintColor: "#66B300",
   },
 
   headerAccountButton: {
@@ -909,7 +1008,7 @@ const styles = StyleSheet.create({
     color: "#285A71",
   },
 
-  // ─── Modais ────────────────────────────────────────────────────────────────
+  // Modais
 
   modalOverlay: {
     flex: 1,
