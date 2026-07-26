@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -51,12 +51,29 @@ export class CompanyService {
 
   async create(createCompanyDto: CreateCompanyDto) {
     const { senha_empresa, cnpj, nome, email, tipo_empresa } = createCompanyDto;
-    
+    const cleanCnpj = cnpj.replace(/\D/g, '');
+
+    // Verificar se o CNPJ já está cadastrado
+    const existingCnpj = await this.companyRepository.findOne({
+      where: { cnpj: cleanCnpj },
+    });
+    if (existingCnpj) {
+      throw new ConflictException('CNPJ já cadastrado');
+    }
+
+    // Verificar se o E-mail corporativo já está cadastrado
+    const existingEmail = await this.companyRepository.findOne({
+      where: { email: email.trim() },
+    });
+    if (existingEmail) {
+      throw new ConflictException('E-mail corporativo já cadastrado');
+    }
+
     // 1. Salvar empresa na tabela 'empresa'
     const company = this.companyRepository.create({
-      cnpj: cnpj.replace(/\D/g, ''),
+      cnpj: cleanCnpj,
       nome,
-      email,
+      email: email.trim(),
       tipo_empresa,
     });
     const savedCompany = await this.companyRepository.save(company);
