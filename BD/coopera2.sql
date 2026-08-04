@@ -1,4 +1,4 @@
-CREATE DATABASE COOPERA_3;
+CREATE DATABASE COOPERA;
 
 CREATE TABLE INFO_EMPRESA(
 pk_id_empresa SERIAL PRIMARY KEY,--Serial gera números automaticos(autoincremento)
