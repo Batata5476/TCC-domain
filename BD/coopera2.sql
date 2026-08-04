@@ -3,14 +3,13 @@
 --Eu mudei o nome da "pk_cod_empresa" para "pk_id_empresa" para ficar mais intuitivo com as telas e também criei campos de senhas para a empresa e para fucnionario
 --Eu comecei fazendo com alter table mas como no meu banco já estava com muitos dados e etc eu fiz a opção mais pratica e que ia deixar o codigo mais organizado que era apagar o banco e salvar de novo
 --enfim aqui tá o codigo
-
-CREATE DATABASE COOPERA_BD;
+CREATE DATABASE COOPERA;
 
 CREATE TABLE INFO_EMPRESA(
 pk_id_empresa SERIAL PRIMARY KEY,--Serial gera números automaticos(autoincremento)
 cnpj_empresa VARCHAR(18) UNIQUE NOT NULL,
 nome_empresa VARCHAR(50) NOT NULL,
-email_empresa VARCHAR(50) NOT NULL,
+email_empresa VARCHAR(50) UNIQUE NOT NULL,
 tipo_empresa VARCHAR(50) NOT NULL,
 senha_empresa VARCHAR(15) NOT NULL
 );
@@ -37,15 +36,13 @@ CREATE TABLE RECOMPENSAS(
 pk_id_recompensa SERIAL PRIMARY KEY,
 nome_recompensa VARCHAR(30) NOT NULL,
 desc_recompensa VARCHAR(100) NOT NULL, 
-valor_recomp INT, --valor é ou 100 pontos ou 200 pontos
+valor_recomp INT NOT NULL, --valor é ou 100 pontos ou 200 pontos
 --chave fk
 fk_id_tarefa INT NOT NULL,
 
 CONSTRAINT fk_tarefa FOREIGN KEY (fk_id_tarefa)
 	REFERENCES TAREFAS(pk_id_tarefas)
 );
-
-
 
 CREATE TABLE REUNIAO(
 pk_id_reuniao SERIAL PRIMARY KEY,
@@ -58,9 +55,9 @@ tipo_reuniao VARCHAR(30) NOT NULL --Ou empresarial ou bem-estar
 CREATE TABLE INFO_FUNCIONARIO(
 pk_id_func SERIAL PRIMARY KEY,
 nome_func VARCHAR(50) NOT NULL,
-cpf_func NUMERIC(14) UNIQUE NOT NULL,
-email_func VARCHAR(50) NOT NULL,
-pontos_acumulados INT, --começa em 0 e aumenta conforme o funcionario ganha pontos e diminui conforme ele resgata as recompensas
+cpf_func VARCHAR(14) UNIQUE NOT NULL,
+email_func VARCHAR(50) UNIQUE NOT NULL,
+pontos_acumulados INT NOT NULL, --começa em 0 e aumenta conforme o funcionario ganha pontos e diminui conforme ele resgata as recompensas
 foto_func VARCHAR(100), --Armazena a URL ou o caminho do diretório onde a foto de perfil do funcionário está localizada
 senha_func VARCHAR(15) NOT NULL,
 --chaves fk
@@ -84,20 +81,18 @@ CREATE TABLE FUNC_TAREFA(
 pk_id_func_tarefa SERIAL PRIMARY KEY,
 --chaves fk
 fk_id_func INT NOT NULL,
-fk_cod_empresa INT NOT NULL,
+fk_id_empresa INT NOT NULL,
 fk_id_tarefa INT NOT NULL,
 
 CONSTRAINT fk_funcionario FOREIGN KEY(fk_id_func)
 	REFERENCES INFO_FUNCIONARIO(pk_id_func),
 
-CONSTRAINT fk_empresa FOREIGN KEY (fk_cod_empresa) 
-        REFERENCES INFO_EMPRESA (pk_cod_empresa),
+CONSTRAINT fk_empresa FOREIGN KEY (fk_id_empresa) 
+        REFERENCES INFO_EMPRESA (pk_id_empresa),
 
 CONSTRAINT fk_tarefa FOREIGN KEY(fk_id_tarefa)
 	REFERENCES TAREFAS(pk_id_tarefas)
 );
-
-ALTER TABLE FUNC_TABLE RENAME TO FUNC_TAREFA;
 
 CREATE TABLE HIS_RECOMPENSAS(
 pk_id_resgate SERIAL PRIMARY KEY,
@@ -154,8 +149,8 @@ tipo_chat VARCHAR(8) NOT NULL,--Terá as opções "em grupo" e "em dupla"
 --chave fk
 fk_id_empresa INT NOT NULL,
 
-CONSTRAINT fk_empresa FOREIGN KEY (fk_cod_empresa) 
-        REFERENCES INFO_EMPRESA (pk_cod_empresa) ON DELETE CASCADE --Se a empresa for apagada todos os chat também são apagados automaticament
+CONSTRAINT fk_empresa FOREIGN KEY (fk_id_empresa) 
+        REFERENCES INFO_EMPRESA (pk_id_empresa) ON DELETE CASCADE --Se a empresa for apagada todos os chat também são apagados automaticament
 
 );
 
@@ -186,7 +181,7 @@ data_envio TIMESTAMPTZ NOT NULL,
 --chaves fk
 fk_id_chat INT NOT NULL,
 fk_id_func INT NOT NULL,
-fk_id_midia INT NOT NULL,
+fk_id_midia INT NULL,
 
 CONSTRAINT fk_chat FOREIGN KEY (fk_id_chat)
 	REFERENCES CHATS(pk_id_chat),
@@ -203,7 +198,7 @@ pk_id_ponto SERIAL PRIMARY KEY,
 entrada TIME NOT NULL,
 saida TIME NOT NULL,
 data_ponto DATE NOT NULL,
-total_dia TIME NOT NULL, --Cálculo automático: (hora_saida - hora_entrada) - tempo_intervalo. Representa a quantidade líquida de horas trabalhadas no dia
+total_dia DECIMAL(5,2) NOT NULL, --Cálculo automático: (hora_saida - hora_entrada) - tempo_intervalo. Representa a quantidade líquida de horas trabalhadas no dia
 --chave fk
 fk_id_func INT NOT NULL,
 
@@ -328,30 +323,6 @@ FROM TAREFAS;
 
 SELECT * FROM vw_tarefas;
 
---views
---views das tarefas(status e prioridade)
-CREATE VIEW vw_tarefas AS
-SELECT 
-    pk_id_tarefas,
-    validade_tarefa,
-    tipo_tarefa,
-
-    CASE 
-        WHEN prioridade_tarefa = 1 THEN 'Urgente'
-        WHEN prioridade_tarefa = 2 THEN 'Normal'
-    END AS prioridade,
-
-    CASE 
-        WHEN status_tarefa = 1 THEN 'Concluída'
-        WHEN status_tarefa = 2 THEN 'Em andamento'
-        WHEN status_tarefa = 3 THEN 'Pendente'
-        WHEN status_tarefa = 4 THEN 'Cancelada'
-    END AS status
-
-FROM TAREFAS;
-
-SELECT * FROM vw_tarefas;
-
 --view do humor_func
 CREATE VIEW vw_humor_func AS
 SELECT
@@ -386,7 +357,7 @@ SELECT
 FROM INFO_FUNCIONARIO f
 
 JOIN INFO_EMPRESA e 
-    ON f.fk_cod_empresa = e.pk_cod_empresa
+    ON f.fk_id_empresa = e.pk_id_empresa
 
 JOIN SETOR s 
     ON f.fk_id_setor = s.pk_id_setor
@@ -475,7 +446,7 @@ BEGIN
     WHERE fk_id_func = NEW.fk_id_func;
 
     -- Calcula total do dia
-    NEW.total_dia := (NEW.saida - NEW.entrada) - v_intervalo;
+   NEW.total_dia := EXTRACT(EPOCH FROM ((NEW.saida - NEW.entrada) - v_intervalo)) / 3600;
 
     RETURN NEW;
 END;
@@ -503,7 +474,7 @@ BEGIN
     WHERE fk_id_func = NEW.fk_id_func;
 
     -- Calcula diferença
-    v_diferenca := NEW.total_dia - v_horas_diarias;
+    v_diferenca := NEW.total_dia - (EXTRACT(EPOCH FROM v_horas_diarias) / 3600);
 
     -- Tenta pegar saldo atual
     SELECT saldo_acumulado 
