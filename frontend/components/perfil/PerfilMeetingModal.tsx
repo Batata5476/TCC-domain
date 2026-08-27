@@ -1,20 +1,24 @@
-import React from "react";
+import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  Alert,
   Modal,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
 import PerfilButton from "./PerfilButton";
+import { authenticatedFetch } from "../../services/api";
 
 type PerfilMeetingModalProps = {
   visible: boolean;
   onClose: () => void;
   subject: string;
   setSubject: (subject: string) => void;
+  onSuccess?: () => void;
 };
 
 export default function PerfilMeetingModal({
@@ -22,7 +26,47 @@ export default function PerfilMeetingModal({
   onClose,
   subject,
   setSubject,
+  onSuccess,
 }: PerfilMeetingModalProps) {
+  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [time, setTime] = useState("14:00");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    if (!subject.trim()) {
+      Alert.alert("Campo obrigatório", "Por favor, informe o assunto da reunião.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const res = await authenticatedFetch("/meetings", {
+        method: "POST",
+        body: JSON.stringify({
+          data_reuniao: date,
+          horario_reuniao: time,
+          assunto_reuniao: subject.trim(),
+          tipo_reuniao: "empresarial",
+          participants: [],
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Erro ao agendar reunião.");
+      }
+
+      Alert.alert("Sucesso", "Reunião solicitada com sucesso!");
+      setSubject("");
+      onClose();
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      Alert.alert("Atenção", err.message || "Não foi possível criar a reunião.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Modal
       visible={visible}
@@ -35,7 +79,7 @@ export default function PerfilMeetingModal({
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>solicitar reunião</Text>
 
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity onPress={onClose} disabled={submitting}>
               <Ionicons
                 name="close-outline"
                 size={23}
@@ -44,7 +88,7 @@ export default function PerfilMeetingModal({
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.meetingOption}>
+          <View style={styles.meetingOption}>
             <View style={styles.optionIcon}>
               <Ionicons
                 name="calendar-outline"
@@ -52,17 +96,27 @@ export default function PerfilMeetingModal({
                 color="#263238"
               />
             </View>
-            <Text style={styles.optionTitle}>definir data</Text>
-            <Text style={styles.optionValue}>10+</Text>
-          </TouchableOpacity>
+            <Text style={styles.optionTitle}>data da reunião</Text>
+            <TextInput
+              value={date}
+              onChangeText={setDate}
+              placeholder="AAAA-MM-DD"
+              style={styles.optionInput}
+            />
+          </View>
 
-          <TouchableOpacity style={styles.meetingOption}>
+          <View style={styles.meetingOption}>
             <View style={styles.optionIcon}>
               <Ionicons name="time-outline" size={20} color="#263238" />
             </View>
-            <Text style={styles.optionTitle}>definir horário</Text>
-            <Text style={styles.optionValue}>10+</Text>
-          </TouchableOpacity>
+            <Text style={styles.optionTitle}>horário</Text>
+            <TextInput
+              value={time}
+              onChangeText={setTime}
+              placeholder="HH:MM"
+              style={styles.optionInput}
+            />
+          </View>
 
           <View style={styles.subjectArea}>
             <View style={styles.subjectTitleRow}>
@@ -85,12 +139,18 @@ export default function PerfilMeetingModal({
           </View>
 
           <View style={styles.modalButtons}>
-            <PerfilButton text="cancelar" type="cancel" onPress={onClose} />
-            <PerfilButton
-              text="confirmar reunião"
-              type="confirm"
-              onPress={onClose}
-            />
+            {submitting ? (
+              <ActivityIndicator color="#285A71" />
+            ) : (
+              <>
+                <PerfilButton text="cancelar" type="cancel" onPress={onClose} />
+                <PerfilButton
+                  text="confirmar reunião"
+                  type="confirm"
+                  onPress={handleConfirm}
+                />
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -150,6 +210,18 @@ const styles = StyleSheet.create({
   optionValue: {
     fontSize: 10,
     color: "#777777",
+  },
+
+  optionInput: {
+    fontSize: 11,
+    color: "#263238",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "#D8D3D8",
+    borderRadius: 4,
+    minWidth: 90,
+    textAlign: "center",
   },
 
   subjectArea: {

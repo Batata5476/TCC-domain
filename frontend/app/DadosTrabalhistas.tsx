@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   SafeAreaView,
   StyleSheet,
@@ -11,15 +11,20 @@ import { useRouter } from "expo-router";
 
 export default function DadosTrabalhistas() {
   const router = useRouter();
+  const [agora, setAgora] = useState(new Date());
 
-  // Data e hora atuais
-  const agora = new Date();
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAgora(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const data = agora.toLocaleDateString("pt-BR"); // Pega apenas a data no formato brasileiro dd/mm/aaaa
-
+  const data = agora.toLocaleDateString("pt-BR"); // dd/mm/aaaa
   const hora = agora.toLocaleTimeString("pt-BR", {
     hour: "2-digit",
-    minute: "2-digit", // Pega apenas horas e minutos
+    minute: "2-digit",
+    second: "2-digit",
   });
 
   return (

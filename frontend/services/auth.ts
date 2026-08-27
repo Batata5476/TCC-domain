@@ -19,11 +19,28 @@ export async function getToken(): Promise<string | null> {
   return SecureStore.getItemAsync('access_token');
 }
 
+export async function saveUserType(type: 'company' | 'user') {
+  if (Platform.OS === 'web') {
+    localStorage.setItem('user_type', type);
+  } else {
+    await SecureStore.setItemAsync('user_type', type);
+  }
+}
+
+export async function getUserType(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return localStorage.getItem('user_type');
+  }
+  return SecureStore.getItemAsync('user_type');
+}
+
 export async function logout() {
   if (Platform.OS === 'web') {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('user_type');
   } else {
     await SecureStore.deleteItemAsync('access_token');
+    await SecureStore.deleteItemAsync('user_type');
   }
 }
 
@@ -57,6 +74,10 @@ export async function login(login: string, senha: string): Promise<LoginResult> 
 
   const token = data.data.access_token;
   await saveToken(token);
+
+  // Persiste o tipo de sessão para uso no dashboard
+  const sessionType = data.data.type as 'company' | 'user';
+  await saveUserType(sessionType);
 
   return data.data as LoginResult;
 }

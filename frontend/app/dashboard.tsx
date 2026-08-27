@@ -91,15 +91,16 @@ export default function Dashboard() {
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // Gera os próximos 7 dias dinamicamente
+  // Gera os próximos 7 dias dinamicamente no fuso local (sem conversão UTC que altera o dia)
   useEffect(() => {
     const list: { label: string; dateString: string }[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
-      const day = String(d.getDate()).padStart(2, "0");
+      const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, "0");
-      const dateString = d.toISOString().split("T")[0];
+      const day = String(d.getDate()).padStart(2, "0");
+      const dateString = `${year}-${month}-${day}`;
       list.push({ label: `${day}/${month}`, dateString });
     }
     setDatesList(list);
@@ -118,42 +119,54 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      // Tenta carregar dados do funcionário
-      const userRes = await authenticatedFetch("/dashboard/user");
+      // Usa o tipo de sessão salvo no login para decidir o fluxo correto
+      const { getUserType } = await import("../services/auth");
+      const sessionType = await getUserType();
 
-      if (userRes.status === 401) {
-        router.replace("/");
-        return;
-      }
+      if (sessionType === "company") {
+        // ── Administrador/Empresa ──────────────────────────────────────
+        setUserType("company");
 
-      if (userRes.ok) {
-        const body = await userRes.json();
+        const companyRes = await authenticatedFetch("/dashboard/company");
+        if (companyRes.status === 401) { router.replace("/"); return; }
+        if (companyRes.ok) {
+          const body = await companyRes.json();
+          setCompanyData(body);
+        }
+
+        // Também carrega as informações do próprio administrador (para ter foto, nome, email no modal)
+        const userRes = await authenticatedFetch("/dashboard/user");
+        if (userRes.ok) {
+          const body = await userRes.json();
+          setUserData(body.data);
+          setUserPhoto(body.data?.foto || null);
+        }
+
+        const empRes = await authenticatedFetch("/users");
+        if (empRes.ok) {
+          const empBody = await empRes.json();
+          setEmployees(empBody.data ?? []);
+        }
+      } else {
+        // ── Funcionário ───────────────────────────────────────────────
         setUserType("user");
-        setUserData(body.data);
-        setUserPhoto(body.data?.foto || null);
 
-        // Tarefas do funcionário
+        const userRes = await authenticatedFetch("/dashboard/user");
+        if (userRes.status === 401) { router.replace("/"); return; }
+        if (userRes.ok) {
+          const body = await userRes.json();
+          setUserData(body.data);
+          setUserPhoto(body.data?.foto || null);
+        } else {
+          // fallback: se o usuário não for reconhecido, redireciona para login
+          router.replace("/");
+          return;
+        }
+
         const tasksRes = await authenticatedFetch("/tasks/my-tasks");
         if (tasksRes.ok) {
           const tasksBody = await tasksRes.json();
           setTasks(tasksBody.data ?? []);
-        }
-      } else {
-        // Senão é empresa
-        const companyRes = await authenticatedFetch("/dashboard/company");
-        if (companyRes.ok) {
-          const body = await companyRes.json();
-          setUserType("company");
-          setCompanyData(body);
-
-          // Lista de colaboradores para atribuição de tarefas
-          const empRes = await authenticatedFetch("/users");
-          if (empRes.ok) {
-            const empBody = await empRes.json();
-            setEmployees(empBody.data ?? []);
-          }
-        } else {
-          router.replace("/");
         }
       }
     } catch (e) {
@@ -171,7 +184,31 @@ export default function Dashboard() {
     }, [fetchDashboard]),
   );
 
-  // ── Ações ──────────────────────────────────────────────────────────────────
+  // ── Ações de Tarefa ────────────────────────────────────────────────────────
+
+  const handleUpdateTaskStatus = async (taskId: number, newStatus: number) => {
+    try {
+      const response = await authenticatedFetch(`/tasks/${taskId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        const label = newStatus === 1 ? "Concluída!" : newStatus === 2 ? "Em Andamento!" : "Pendente!";
+        Alert.alert("Sucesso 🎉", `Status da tarefa alterado para ${label}`);
+        fetchDashboard();
+      } else {
+        Alert.alert("Erro", "Não foi possível atualizar o status da tarefa.");
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Erro", "Erro ao conectar com o servidor.");
+    }
+  };
+
+  const handleCompleteTask = async (taskId: number) => {
+    handleUpdateTaskStatus(taskId, 1);
+  };
 
   const handleLogout = async () => {
     setAccountModalVisible(false);
@@ -233,25 +270,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleCompleteTask = async (taskId: number) => {
-    try {
-      const response = await authenticatedFetch(`/tasks/${taskId}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: 1 }),
-      });
-
-      if (response.ok) {
-        Alert.alert("Sucesso 🎉", "Tarefa concluída! +100 pontos adicionados.");
-        fetchDashboard();
-      } else {
-        Alert.alert("Erro", "Não foi possível atualizar a tarefa.");
-      }
-    } catch (e) {
-      console.error(e);
-      Alert.alert("Erro", "Erro ao conectar com o servidor.");
-    }
-  };
-
   const handleCreateTask = async () => {
     if (!taskTitle.trim()) {
       Alert.alert("Erro", "Por favor, preencha o título da tarefa.");
@@ -267,10 +285,15 @@ export default function Dashboard() {
     if (taskDueDate === "amanha") dueDate.setDate(dueDate.getDate() + 1);
     else if (taskDueDate === "semana") dueDate.setDate(dueDate.getDate() + 7);
 
+    const year = dueDate.getFullYear();
+    const month = String(dueDate.getMonth() + 1).padStart(2, "0");
+    const day = String(dueDate.getDate()).padStart(2, "0");
+    const dateStringLocal = `${year}-${month}-${day}`;
+
     try {
       const body: any = {
         tipo_tarefa: taskTitle,
-        validade_tarefa: dueDate.toISOString().split("T")[0],
+        validade_tarefa: dateStringLocal,
         prioridade_tarefa: taskPriority,
       };
       if (userType === "company") {
@@ -305,7 +328,8 @@ export default function Dashboard() {
 
   const activeTasks = tasks.filter((t) => {
     if (!t.dueDate) return false;
-    return t.dueDate.split("T")[0] === selectedDateStr && t.status !== 1;
+    const taskDateOnly = t.dueDate.includes("T") ? t.dueDate.split("T")[0] : t.dueDate;
+    return taskDateOnly === selectedDateStr && t.status !== 1;
   });
 
   const urgentTasks = activeTasks.filter((t) => t.priority === 1);
@@ -323,13 +347,28 @@ export default function Dashboard() {
 
       <Text style={styles.taskPoints}>{task.points}+</Text>
 
-      <TouchableOpacity
-        style={styles.checkButton}
-        activeOpacity={0.8}
-        onPress={() => handleCompleteTask(task.id)}
-      >
-        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-      </TouchableOpacity>
+      {/* Botões de Alteração de Status */}
+      <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+        {/* Em Andamento (Status 2) */}
+        {task.status !== 2 && (
+          <TouchableOpacity
+            style={[styles.checkButton, { backgroundColor: "#D97706" }]}
+            activeOpacity={0.8}
+            onPress={() => handleUpdateTaskStatus(task.id, 2)}
+          >
+            <Ionicons name="time-outline" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+
+        {/* Concluída (Status 1) */}
+        <TouchableOpacity
+          style={styles.checkButton}
+          activeOpacity={0.8}
+          onPress={() => handleUpdateTaskStatus(task.id, 1)}
+        >
+          <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -350,7 +389,14 @@ export default function Dashboard() {
           accessibilityRole="button"
           accessibilityLabel="Informações da conta"
         >
-          <Ionicons name="person" size={26} color="#94A3B8" />
+          {userPhoto || userData?.foto ? (
+            <Image
+              source={{ uri: (userPhoto || userData?.foto) ?? undefined }}
+              style={{ width: 32, height: 32, borderRadius: 16 }}
+            />
+          ) : (
+            <Ionicons name="person" size={26} color="#94A3B8" />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -622,6 +668,59 @@ export default function Dashboard() {
                 </View>
               </View>
             )}
+
+            {/* Botão de navegação para o perfil — exibido conforme o tipo de sessão */}
+            <View style={{ gap: 8, marginTop: 16, marginBottom: 8, width: "100%" }}>
+              {/* Colaborador: ver apenas perfil de colaborador */}
+              {userType === "user" && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: "#285A71",
+                    paddingVertical: 12,
+                    paddingHorizontal: 18,
+                    borderRadius: 12,
+                  }}
+                  onPress={() => {
+                    setAccountModalVisible(false);
+                    router.push("/perfilFunc");
+                  }}
+                >
+                  <Ionicons name="person-outline" size={18} color="#FFFFFF" />
+                  <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700" }}>
+                    Perfil do Colaborador
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Administrador: ver apenas perfil administrativo */}
+              {userType === "company" && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: "#4B5563",
+                    paddingVertical: 12,
+                    paddingHorizontal: 18,
+                    borderRadius: 12,
+                  }}
+                  onPress={() => {
+                    setAccountModalVisible(false);
+                    router.push("/perfilAdm");
+                  }}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={18} color="#FFFFFF" />
+                  <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700" }}>
+                    Perfil Administrativo
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Botão de logout */}
             <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>

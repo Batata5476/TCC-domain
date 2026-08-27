@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Permission } from './permission.entity';
 import { Role } from './role.entity';
+import { Setor } from '../../company/entities/setor.entity';
 
 @Entity('usuario')
 export class User {
@@ -72,6 +73,10 @@ export class User {
   @ManyToOne(() => Role, { nullable: true, eager: false })
   @JoinColumn({ name: 'role_id' })
   role: Role;
+
+  @ManyToOne(() => Setor, { nullable: true, eager: false })
+  @JoinColumn({ name: 'setor_id' })
+  setor: Setor;
 
   @ManyToMany(() => Permission, { cascade: true, eager: false })
   @JoinTable({

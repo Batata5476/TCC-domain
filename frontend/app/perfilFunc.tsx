@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -8,10 +10,104 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
+import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import PerfilHeader from "../components/perfil/perfilHeader";
+import PerfilAvatar from "../components/perfil/PerfilAvatar";
+import PerfilInfo from "../components/perfil/PerfilInfo";
+import PerfilAction from "../components/perfil/PerfilAction";
+import PerfilMeetingModal from "../components/perfil/PerfilMeetingModal";
+import PerfilMedicalModal from "../components/perfil/PerfilMedicalModal";
+import PerfilPointsModal from "../components/perfil/PerfilPointsModal";
+import { authenticatedFetch } from "../services/api";
+
+type UserData = {
+  id: number;
+  nome: string;
+  email: string;
+  cpf?: string;
+  telefone?: string;
+  pontos: number;
+  foto: string | null;
+  tarefasPendentes: number;
+  tarefasConcluidas: number;
+  cargo?: string;
+  setor?: string;
+};
 
 export default function PerfilFunc() {
+  const router = useRouter();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Estados dos Modais
+  const [meetingOpen, setMeetingOpen] = useState(false);
+  const [medicalOpen, setMedicalOpen] = useState(false);
+  const [pointsOpen, setPointsOpen] = useState(false);
+  const [subject, setSubject] = useState("");
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const res = await authenticatedFetch("/dashboard/user");
+      if (res.ok) {
+        const body = await res.json();
+        setUserData(body.data);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar dados em perfilFunc:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Upload e Salvar Foto de Perfil
+  const handlePickPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permissão negada", "Precisamos de acesso à galeria para alterar sua foto.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (result.canceled || !result.assets?.[0]?.base64 || !userData?.id) return;
+
+    const asset = result.assets[0];
+    const mimeType = asset.mimeType || "image/jpeg";
+    const photoDataUri = `data:${mimeType};base64,${asset.base64}`;
+
+    setUserData((prev) => (prev ? { ...prev, foto: photoDataUri } : null));
+    setUploadingPhoto(true);
+
+    try {
+      const res = await authenticatedFetch(`/users/${userData.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ foto: photoDataUri, foto_func: photoDataUri }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Erro ao salvar foto no banco.");
+      }
+      Alert.alert("Sucesso", "Foto de perfil atualizada com sucesso!");
+    } catch (err: any) {
+      Alert.alert("Atenção", err.message || "Não foi possível salvar a foto.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -20,112 +116,129 @@ export default function PerfilFunc() {
       >
         <PerfilHeader />
 
-        {/* FOTO / PERFIL */}
-        <View style={styles.profileCard}>
-          <View style={styles.photoArea}>
-            <View style={styles.avatar}>
-              <Ionicons
-                name="person"
-                size={80}
-                color="#FFFFFF"
-              />
-            </View>
+        {/* TÍTULO DA TELA */}
+        <Text style={styles.title}>Perfil do Colaborador</Text>
 
-            <View style={styles.nameArea}>
-              <Text style={styles.name}>
-                Nome do funcionário
-              </Text>
-
-              <Text style={styles.employeeCode}>
-                cod de func
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* SETOR E FUNÇÃO */}
-        <View style={styles.positionArea}>
-          <Text style={styles.sector}>
-            setor
-          </Text>
-
-          <Text style={styles.function}>
-            função
-          </Text>
-        </View>
-
-        {/* AVALIAÇÃO */}
-        <View style={styles.evaluationRow}>
-          <Text style={styles.evaluationTitle}>
-            avaliação
-          </Text>
-
-          <View style={styles.stars}>
-            <Ionicons name="star" size={16} color="#6D6278" />
-            <Ionicons name="star" size={16} color="#6D6278" />
-            <Ionicons name="star" size={16} color="#6D6278" />
-            <Ionicons name="star" size={16} color="#6D6278" />
-            <Ionicons name="star-outline" size={16} color="#6D6278" />
-          </View>
-        </View>
-
-        {/* INFORMAÇÕES */}
-        <View style={styles.infoContainer}>
-          <Text style={styles.infoText}>
-            Cpf
-          </Text>
-
-          <Text style={styles.infoText}>
-            email
-          </Text>
-
-          <Text style={styles.infoText}>
-            data de nascimento
-          </Text>
-
-          <Text style={styles.infoText}>
-            início do contrato
-          </Text>
-
-          <Text style={styles.infoText}>
-            Pontos acumulados
-          </Text>
-        </View>
-
-        {/* AÇÕES */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons
-              name="calendar-outline"
-              size={15}
-              color="#5E4B78"
+        {loading ? (
+          <ActivityIndicator size="large" color="#285A71" style={{ marginVertical: 30 }} />
+        ) : (
+          <>
+            {/* AVATAR COM EDITAR FOTO */}
+            <PerfilAvatar
+              fotoUrl={userData?.foto}
+              onPickPhoto={handlePickPhoto}
+              uploading={uploadingPhoto}
             />
 
-            <Text style={styles.actionText}>
-              tarefas
-            </Text>
-          </TouchableOpacity>
+            {/* NOME E CÓDIGO */}
+            <View style={styles.nameHeaderCard}>
+              <Text style={styles.userName}>{userData?.nome || "Nome do funcionário"}</Text>
+              <Text style={styles.userCode}>
+                Código ID: #{userData?.id ? String(userData.id).padStart(4, "0") : "----"}
+              </Text>
+            </View>
 
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons
-              name="walk-outline"
-              size={15}
-              color="#5E4B78"
+            {/* CARGO E SETOR */}
+            <View style={styles.positionCard}>
+              <View style={styles.positionBadge}>
+                <Ionicons name="briefcase-outline" size={14} color="#285A71" />
+                <Text style={styles.positionText}>{userData?.cargo || "Colaborador"}</Text>
+              </View>
+              <View style={styles.positionBadge}>
+                <Ionicons name="business-outline" size={14} color="#285A71" />
+                <Text style={styles.positionText}>{userData?.setor || "Operacional"}</Text>
+              </View>
+            </View>
+
+            {/* INFORMAÇÕES PESSOAIS */}
+            <PerfilInfo
+              email={userData?.email}
+              cpf={userData?.cpf}
+              telefone={userData?.telefone}
             />
 
-            <Text style={styles.actionText}>
-              bem estar
-            </Text>
-          </TouchableOpacity>
-        </View>
+            {/* CARDS DE RESUMO / PONTOS / TAREFAS */}
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Ionicons name="trophy" size={22} color="#D97706" />
+                <Text style={styles.statNumber}>{userData?.pontos ?? 0}</Text>
+                <Text style={styles.statLabel}>Pontos</Text>
+              </View>
 
-        {/* TÍTULO */}
-        <Text style={styles.sectionTitle}>
-          informações
-        </Text>
+              <View style={styles.statCard}>
+                <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
+                <Text style={styles.statNumber}>{userData?.tarefasConcluidas ?? 0}</Text>
+                <Text style={styles.statLabel}>Concluídas</Text>
+              </View>
 
-        <View style={styles.bottomArea} />
+              <View style={styles.statCard}>
+                <Ionicons name="time" size={22} color="#285A71" />
+                <Text style={styles.statNumber}>{userData?.tarefasPendentes ?? 0}</Text>
+                <Text style={styles.statLabel}>Pendentes</Text>
+              </View>
+            </View>
+
+            {/* AÇÕES E RECURSOS */}
+            <Text style={styles.sectionTitle}>ferramentas & recursos</Text>
+
+            <PerfilAction
+              icon="calendar-outline"
+              text="solicitar reunião"
+              onPress={() => setMeetingOpen(true)}
+              showAdd={false}
+            />
+
+            <PerfilAction
+              icon="wallet-outline"
+              text="dados trabalhistas"
+              onPress={() => router.push("/DadosTrabalhistas")}
+              showAdd={false}
+            />
+
+            <PerfilAction
+              icon="trophy-outline"
+              text="sistema de pontuações"
+              onPress={() => setPointsOpen(true)}
+              showAdd={false}
+            />
+
+            <PerfilAction
+              icon="medkit-outline"
+              text="histórico médico e ausências"
+              onPress={() => setMedicalOpen(true)}
+              showAdd={false}
+            />
+
+            <PerfilAction
+              icon="checkbox-outline"
+              text="ver minhas tarefas"
+              onPress={() => router.push("/dashboard")}
+              showAdd={false}
+            />
+          </>
+        )}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Modais */}
+      <PerfilMeetingModal
+        visible={meetingOpen}
+        onClose={() => setMeetingOpen(false)}
+        subject={subject}
+        setSubject={setSubject}
+      />
+
+      <PerfilMedicalModal
+        visible={medicalOpen}
+        onClose={() => setMedicalOpen(false)}
+      />
+
+      <PerfilPointsModal
+        visible={pointsOpen}
+        onClose={() => setPointsOpen(false)}
+        pontos={userData?.pontos ?? 0}
+      />
     </SafeAreaView>
   );
 }
@@ -133,147 +246,92 @@ export default function PerfilFunc() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#F8FAFC",
   },
-
   scrollContent: {
-    paddingBottom: 35,
+    paddingBottom: 40,
   },
-
-  /* PERFIL */
-
-  profileCard: {
+  title: {
     marginHorizontal: 20,
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "#ECE6F0",
+    marginTop: 6,
+    marginBottom: 12,
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#285A71",
   },
-
-  photoArea: {
-    height: 230,
-    backgroundColor: "#D6BFC4",
-    justifyContent: "flex-end",
-  },
-
-  avatar: {
-    position: "absolute",
-    top: 25,
-    left: 20,
-    right: 20,
-    bottom: 0,
-    justifyContent: "center",
+  nameHeaderCard: {
+    marginHorizontal: 20,
+    marginTop: 4,
     alignItems: "center",
   },
-
-  nameArea: {
-    paddingHorizontal: 14,
-    paddingBottom: 12,
+  userName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1E293B",
   },
-
-  name: {
-    fontSize: 25,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-
-  employeeCode: {
-    marginTop: 2,
-    fontSize: 9,
-    color: "#FFFFFF",
-  },
-
-  /* SETOR / FUNÇÃO */
-
-  positionArea: {
-    alignItems: "center",
-    marginTop: 10,
-  },
-
-  sector: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#263238",
-  },
-
-  function: {
-    marginTop: 1,
-    fontSize: 9,
-    color: "#263238",
-  },
-
-  /* AVALIAÇÃO */
-
-  evaluationRow: {
-    marginHorizontal: 20,
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  evaluationTitle: {
-    fontSize: 11,
-    color: "#263238",
-  },
-
-  stars: {
-    flexDirection: "row",
-    marginLeft: "auto",
-    gap: 2,
-  },
-
-  /* INFORMAÇÕES */
-
-  infoContainer: {
-    marginHorizontal: 20,
-    marginTop: 5,
-    gap: 3,
-  },
-
-  infoText: {
-    fontSize: 9,
-    color: "#263238",
-  },
-
-  /* AÇÕES */
-
-  actionsContainer: {
-    marginHorizontal: 20,
-    marginTop: 9,
-    gap: 4,
-  },
-
-  actionButton: {
-    alignSelf: "flex-start",
-    minWidth: 72,
-    height: 24,
-    paddingHorizontal: 8,
-    borderRadius: 5,
-    backgroundColor: "#F5F1F8",
-    borderWidth: 1,
-    borderColor: "#D7CEDD",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-
-  actionText: {
-    fontSize: 8,
-    color: "#263238",
-  },
-
-  /* SEÇÃO */
-
-  sectionTitle: {
-    marginTop: 3,
-    paddingHorizontal: 20,
-    paddingVertical: 7,
-    backgroundColor: "#ECEAF0",
+  userCode: {
     fontSize: 12,
-    color: "#263238",
+    color: "#64748B",
+    marginTop: 2,
+    fontWeight: "500",
   },
-
-  bottomArea: {
-    height: 150,
-    backgroundColor: "#F5F5F5",
+  positionCard: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  positionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ECEFDA",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  positionText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#285A71",
+  },
+  statsRow: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    marginVertical: 12,
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    elevation: 1,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginTop: 4,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 2,
+    fontWeight: "500",
+  },
+  sectionTitle: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 10,
+    fontSize: 13,
+    color: "#285A71",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });

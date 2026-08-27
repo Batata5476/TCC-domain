@@ -114,17 +114,12 @@ async function run() {
       console.log(`   Login: CNPJ 99.888.777/0001-00 | Senha: Teste@123`);
     } else {
       console.log(`✅ Usuário Master encontrado: ID=${masterRes.rows[0].id}, "${masterRes.rows[0].nome}"`);
-      console.log(`   Status: ${masterRes.rows[0].status} | Primeiro acesso: ${masterRes.rows[0].primeiro_acesso}`);
-
-      // Garantir que está ACTIVE e sem primeiro_acesso
-      if (masterRes.rows[0].status !== 'ACTIVE' || masterRes.rows[0].primeiro_acesso) {
-        const hashedPw = await bcrypt.hash('Teste@123', 10);
-        await client.query(
-          `UPDATE usuario SET status = 'ACTIVE', primeiro_acesso = false, senha = $1 WHERE id = $2`,
-          [hashedPw, masterRes.rows[0].id]
-        );
-        console.log('   🔧 Status corrigido para ACTIVE e senha redefinida para: Teste@123');
-      }
+      const hashedPw = await bcrypt.hash('Teste@123', 10);
+      await client.query(
+        `UPDATE usuario SET status = 'ACTIVE', primeiro_acesso = false, senha = $1 WHERE id = $2`,
+        [hashedPw, masterRes.rows[0].id]
+      );
+      console.log('   🔧 Senha redefinida com sucesso para: Teste@123');
     }
 
     // ──── 5. VERIFICAR / INSERIR FUNCIONÁRIO DE TESTE ────────────────────────
@@ -150,16 +145,12 @@ async function run() {
       console.log(`   Login: CPF 123.456.789-00 | Senha: Teste@123`);
     } else {
       console.log(`✅ Funcionário encontrado: ID=${funcRes.rows[0].id}, "${funcRes.rows[0].nome}"`);
-      console.log(`   Status: ${funcRes.rows[0].status} | Primeiro acesso: ${funcRes.rows[0].primeiro_acesso}`);
-
-      if (funcRes.rows[0].status !== 'ACTIVE' || funcRes.rows[0].primeiro_acesso) {
-        const hashedPw = await bcrypt.hash('Teste@123', 10);
-        await client.query(
-          `UPDATE usuario SET status = 'ACTIVE', primeiro_acesso = false, senha = $1 WHERE id = $2`,
-          [hashedPw, funcRes.rows[0].id]
-        );
-        console.log('   🔧 Status corrigido para ACTIVE e senha redefinida para: Teste@123');
-      }
+      const hashedPw = await bcrypt.hash('Teste@123', 10);
+      await client.query(
+        `UPDATE usuario SET status = 'ACTIVE', primeiro_acesso = false, senha = $1 WHERE id = $2`,
+        [hashedPw, funcRes.rows[0].id]
+      );
+      console.log('   🔧 Senha redefinida com sucesso para: Teste@123');
     }
 
     // ──── 6. RESUMO FINAL ─────────────────────────────────────────────────────

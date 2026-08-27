@@ -229,7 +229,10 @@ export class UsersService {
     // Atualizar dados cadastrais
     if (updateUserDto.nome !== undefined) targetUser.nome = updateUserDto.nome;
     if (updateUserDto.email !== undefined) targetUser.email = updateUserDto.email.trim();
-    if (updateUserDto.foto !== undefined) targetUser.foto = updateUserDto.foto;
+    if (updateUserDto.foto !== undefined) {
+      targetUser.foto = updateUserDto.foto;
+      targetUser.foto_func = updateUserDto.foto;
+    }
     if (updateUserDto.telefone !== undefined) targetUser.telefone = updateUserDto.telefone;
     if (updateUserDto.cargo !== undefined) targetUser.cargo = updateUserDto.cargo;
 
