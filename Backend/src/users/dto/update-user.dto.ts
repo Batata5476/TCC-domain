@@ -14,6 +14,10 @@ export class UpdateUserDto {
   foto?: string;
 
   @IsString()
+  @IsOptional()
+  foto_func?: string;
+
+  @IsString()
   @MinLength(8)
   @IsOptional()
   senha?: string;

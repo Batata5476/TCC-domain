@@ -233,6 +233,10 @@ export class UsersService {
       targetUser.foto = updateUserDto.foto;
       targetUser.foto_func = updateUserDto.foto;
     }
+    if (updateUserDto.foto_func !== undefined) {
+      targetUser.foto = updateUserDto.foto_func;
+      targetUser.foto_func = updateUserDto.foto_func;
+    }
     if (updateUserDto.telefone !== undefined) targetUser.telefone = updateUserDto.telefone;
     if (updateUserDto.cargo !== undefined) targetUser.cargo = updateUserDto.cargo;
 

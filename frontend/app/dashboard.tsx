@@ -134,7 +134,7 @@ export default function Dashboard() {
           setCompanyData(body);
         }
 
-        // Também carrega as informações do próprio administrador (para ter foto, nome, email no modal)
+        // Também carrega as informações do usuário logado (o administrador)
         const userRes = await authenticatedFetch("/dashboard/user");
         if (userRes.ok) {
           const body = await userRes.json();
@@ -253,7 +253,7 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ foto: photoDataUri }),
+        body: JSON.stringify({ foto: photoDataUri, foto_func: photoDataUri }),
       });
 
       if (response.ok) {
@@ -645,7 +645,8 @@ export default function Dashboard() {
 
             {userType === "company" && companyData && (
               <View style={styles.accountInfo}>
-                <Text style={styles.accountName}>Painel Corporativo</Text>
+                <Text style={styles.accountName}>{userData?.nome || "Painel Corporativo"}</Text>
+                <Text style={styles.accountEmail}>{userData?.email || "Administrador"}</Text>
 
                 <View style={styles.accountStatRow}>
                   <View style={styles.accountStat}>
@@ -666,6 +667,30 @@ export default function Dashboard() {
                     <Text style={styles.accountStatLabel}>Pendentes</Text>
                   </View>
                 </View>
+
+                {/* Botão Trocar Foto para Admin */}
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: "#ECEFD9",
+                    paddingVertical: 12,
+                    paddingHorizontal: 24,
+                    borderRadius: 14,
+                    marginTop: 16,
+                    borderWidth: 0.5,
+                    borderColor: "#285A71",
+                  }}
+                  onPress={handlePickPhoto}
+                  disabled={uploadingPhoto}
+                >
+                  <Ionicons name="camera-outline" size={18} color="#285A71" />
+                  <Text style={{ color: "#285A71", fontSize: 14, fontWeight: "700" }}>
+                    Trocar Foto
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -696,7 +721,7 @@ export default function Dashboard() {
                 </TouchableOpacity>
               )}
 
-              {/* Administrador: ver apenas perfil administrativo */}
+              {/* Administrador: ver perfil administrativo apenas */}
               {userType === "company" && (
                 <TouchableOpacity
                   style={{
@@ -704,7 +729,7 @@ export default function Dashboard() {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 8,
-                    backgroundColor: "#4B5563",
+                    backgroundColor: "#285A71",
                     paddingVertical: 12,
                     paddingHorizontal: 18,
                     borderRadius: 12,

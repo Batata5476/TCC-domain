@@ -173,13 +173,6 @@ export default function PerfilAdm() {
           onPress={() => router.push("/dashboard")}
           showAdd={false}
         />
-
-        <PerfilAction
-          icon="person-outline"
-          text="ver perfil de colaborador"
-          onPress={() => router.push("/perfilFunc")}
-          showAdd={false}
-        />
       </ScrollView>
 
       {/* Modais */}
