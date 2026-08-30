@@ -206,10 +206,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleCompleteTask = async (taskId: number) => {
-    handleUpdateTaskStatus(taskId, 1);
-  };
-
   const handleLogout = async () => {
     setAccountModalVisible(false);
     await logout();
@@ -328,7 +324,10 @@ export default function Dashboard() {
 
   const activeTasks = tasks.filter((t) => {
     if (!t.dueDate) return false;
-    const taskDateOnly = t.dueDate.includes("T") ? t.dueDate.split("T")[0] : t.dueDate;
+    // dueDate já vem como 'YYYY-MM-DD' do backend corrigido — compara direto
+    const taskDateOnly = typeof t.dueDate === 'string' && t.dueDate.includes('T')
+      ? t.dueDate.split('T')[0]
+      : String(t.dueDate);
     return taskDateOnly === selectedDateStr && t.status !== 1;
   });
 
@@ -337,40 +336,69 @@ export default function Dashboard() {
 
   // ── Renderização de item de tarefa ─────────────────────────────────────────
 
-  const renderTask = (task: TaskItem) => (
-    <View key={task.id} style={styles.taskItem}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{task.name.charAt(0).toUpperCase()}</Text>
+  const renderTask = (task: TaskItem) => {
+    const isCompany = userType === "company";
+    return (
+      <View key={task.id} style={styles.taskItem}>
+        {/* Indicador de status */}
+        <View style={[
+          styles.statusDot,
+          task.status === 2 && { backgroundColor: "#D97706" },
+          task.status === 3 && { backgroundColor: "#94A3B8" },
+        ]} />
+
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{task.name.charAt(0).toUpperCase()}</Text>
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text style={styles.taskName}>{task.name}</Text>
+          <Text style={{ fontSize: 10, color: task.status === 2 ? "#D97706" : "#94A3B8", marginTop: 1 }}>
+            {task.status === 3 ? "Pendente" : task.status === 2 ? "Em andamento" : "Concluída"}
+          </Text>
+        </View>
+
+        <Text style={styles.taskPoints}>{task.points}+</Text>
+
+        {/* Botões de Alteração de Status */}
+        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+          {/* Em Andamento (Status 2) — exibe se pendente (3) */}
+          {task.status === 3 && (
+            <TouchableOpacity
+              style={[styles.checkButton, { backgroundColor: "#D97706" }]}
+              activeOpacity={0.8}
+              onPress={() => handleUpdateTaskStatus(task.id, 2)}
+            >
+              <Ionicons name="time-outline" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
+          {/* Concluída (Status 1) — disponível para funcionário em qualquer status,
+              para empresa sempre disponível */}
+          {(task.status === 3 || task.status === 2) && (
+            <TouchableOpacity
+              style={styles.checkButton}
+              activeOpacity={0.8}
+              onPress={() => handleUpdateTaskStatus(task.id, 1)}
+            >
+              <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
+          {/* Empresa pode resetar para Pendente se estava Em Andamento */}
+          {isCompany && task.status === 2 && (
+            <TouchableOpacity
+              style={[styles.checkButton, { backgroundColor: "#94A3B8" }]}
+              activeOpacity={0.8}
+              onPress={() => handleUpdateTaskStatus(task.id, 3)}
+            >
+              <Ionicons name="refresh-outline" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-
-      <Text style={styles.taskName}>{task.name}</Text>
-
-      <Text style={styles.taskPoints}>{task.points}+</Text>
-
-      {/* Botões de Alteração de Status */}
-      <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
-        {/* Em Andamento (Status 2) */}
-        {task.status !== 2 && (
-          <TouchableOpacity
-            style={[styles.checkButton, { backgroundColor: "#D97706" }]}
-            activeOpacity={0.8}
-            onPress={() => handleUpdateTaskStatus(task.id, 2)}
-          >
-            <Ionicons name="time-outline" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
-
-        {/* Concluída (Status 1) */}
-        <TouchableOpacity
-          style={styles.checkButton}
-          activeOpacity={0.8}
-          onPress={() => handleUpdateTaskStatus(task.id, 1)}
-        >
-          <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -1030,6 +1058,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#285A71",
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#16A34A",
+    marginRight: 4,
   },
 
   loadingRow: {

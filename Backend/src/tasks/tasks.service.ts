@@ -47,7 +47,7 @@ export class TasksService {
   async create(
     data: {
       tipo_tarefa: string;
-      validade_tarefa: Date;
+      validade_tarefa: Date | string;
       prioridade_tarefa: number;
       fk_id_func?: number;
     },
@@ -81,9 +81,19 @@ export class TasksService {
     }
 
     // 1. Cria a tarefa
+    // Normaliza a data: trata string YYYY-MM-DD como data LOCAL para evitar
+    // conversão UTC que deslocaria o dia (ex: '2026-08-30' → 29T03:00Z em UTC-3)
+    let validadeNormalizada: string;
+    if (typeof data.validade_tarefa === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.validade_tarefa)) {
+      validadeNormalizada = data.validade_tarefa; // já está no formato correto para tipo DATE
+    } else {
+      const d = new Date(data.validade_tarefa);
+      validadeNormalizada = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
     const task = this.taskRepository.create({
       tipo_tarefa: data.tipo_tarefa,
-      validade_tarefa: data.validade_tarefa,
+      validade_tarefa: validadeNormalizada as unknown as Date,
       prioridade_tarefa: data.prioridade_tarefa,
       status_tarefa: 3, // 3 = Pendente por padrão
     });
@@ -114,14 +124,34 @@ export class TasksService {
 
     const tasks = associations
       .filter((assoc) => assoc.tarefa !== null)
-      .map((assoc) => ({
-        id: assoc.tarefa.pk_id_tarefas,
-        name: assoc.tarefa.tipo_tarefa,
-        points: '100', // Padrão de pontos do trigger do banco de dados
-        priority: assoc.tarefa.prioridade_tarefa,
-        status: assoc.tarefa.status_tarefa,
-        dueDate: assoc.tarefa.validade_tarefa,
-      }));
+      .map((assoc) => {
+        // Normaliza a data: PostgreSQL retorna tipo DATE como meia-noite UTC,
+        // o que causa deslocamento de um dia em fusos UTC-N.
+        // Extraímos apenas YYYY-MM-DD direto da ISO string para preservar a data original.
+        const rawDate = assoc.tarefa.validade_tarefa;
+        let dueDateStr: string;
+        if (rawDate) {
+          const iso = new Date(rawDate).toISOString(); // ex: "2026-08-30T03:00:00.000Z"
+          dueDateStr = iso.split('T')[0];              // ex: "2026-08-30" ✓ — mas ERRADO p/ UTC-3 (seria 2026-08-29T03)
+          // CORREÇÃO: soma o offset para obter a data local correta
+          const d = new Date(rawDate);
+          const localYear = d.getUTCFullYear();
+          const localMonth = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const localDay = String(d.getUTCDate()).padStart(2, '0');
+          dueDateStr = `${localYear}-${localMonth}-${localDay}`;
+        } else {
+          dueDateStr = '';
+        }
+
+        return {
+          id: assoc.tarefa.pk_id_tarefas,
+          name: assoc.tarefa.tipo_tarefa,
+          points: '100',
+          priority: assoc.tarefa.prioridade_tarefa,
+          status: assoc.tarefa.status_tarefa,
+          dueDate: dueDateStr,
+        };
+      });
 
     return {
       status: 'success',
@@ -143,24 +173,24 @@ export class TasksService {
     const isCompanyAdmin =
       caller.role === 'Administrador Master' || caller.role === 'Administrador';
 
-    // Regras de transição de status para funcionários
+    // Regras de transição de status
+    // Funcionários: 3→2, 2→1, 3→1 (conclusão direta permitida)
+    // Empresa: qualquer transição exceto re-abrir (1→3)
     if (!isCompanyAdmin) {
       const currentStatus = task.status_tarefa;
       const isAllowed =
-        (currentStatus === 3 && status === 2) || // Pendente -> Em andamento
-        (currentStatus === 2 && status === 1);   // Em andamento -> Concluída
+        (currentStatus === 3 && (status === 2 || status === 1)) || // Pendente -> Em andamento ou Concluída
+        (currentStatus === 2 && status === 1);                      // Em andamento -> Concluída
 
       if (!isAllowed) {
         throw new ForbiddenException(
-          `Transição de status inválida para funcionários (de ${currentStatus} para ${status})`,
+          `Transição de status inválida (de ${currentStatus} para ${status})`,
         );
       }
     } else {
-      // Regras de transição para Empresa
-      if (status === 1) {
-        throw new ForbiddenException(
-          'Empresas não podem marcar tarefas diretamente como concluídas (evita concessão imprópria de pontos)',
-        );
+      // Empresa pode mudar qualquer status menos re-abrir (1→3)
+      if (task.status_tarefa === 1 && status === 3) {
+        throw new ForbiddenException('Não é possível reabrir uma tarefa já concluída');
       }
     }
 
