@@ -15,13 +15,11 @@ async function seedDb() {
     await client.connect();
     
     // Read the SQL files
-    const cooperaSql = fs.readFileSync(path.join(__dirname, '..', 'BD', 'coopera.sql'), 'utf8');
+    const cooperaSql = fs.readFileSync(path.join(__dirname, '..', 'BD', 'coopera_oficial.sql'), 'utf8');
     const dadosSql = fs.readFileSync(path.join(__dirname, '..', 'BD', 'dadosdeteste.sql'), 'utf8');
 
-    console.log('Applying coopera.sql...');
-    // We skip the CREATE DATABASE because we already did it
-    const schemaSql = cooperaSql.replace('CREATE DATABASE COOPERA;', '');
-    await client.query(schemaSql);
+    console.log('Applying coopera_oficial.sql...');
+    await client.query(cooperaSql);
     
     console.log('Applying dadosdeteste.sql...');
     await client.query(dadosSql);
