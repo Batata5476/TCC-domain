@@ -5,27 +5,54 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { authenticatedFetch } from "../services/api";
+
+type WorkRecord = {
+  pk_id_ponto: number;
+  data_ponto: string;
+  entrada: string;
+  saida: string;
+  total_dia: string;
+};
 
 export default function DadosTrabalhistas() {
   const router = useRouter();
   const [agora, setAgora] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [ultimoPonto, setUltimoPonto] = useState<WorkRecord | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setAgora(new Date());
     }, 1000);
+
+    fetchPonto();
+
     return () => clearInterval(timer);
   }, []);
 
-  const data = agora.toLocaleDateString("pt-BR"); // dd/mm/aaaa
-  const hora = agora.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const fetchPonto = async () => {
+    try {
+      setLoading(true);
+      const res = await authenticatedFetch("/work");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          setUltimoPonto(json.data[0]);
+        }
+      }
+    } catch (error) {
+      console.log("Erro ao carregar dados de ponto:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const data = agora.toLocaleDateString("pt-BR");
 
   return (
     <SafeAreaView style={styles.container}>
@@ -43,8 +70,8 @@ export default function DadosTrabalhistas() {
       <View style={styles.card}>
         <View style={styles.cardContent}>
           <Text style={styles.cardTitle}>salário</Text>
-          <Text style={styles.cardSubtitle}>Salário mensal</Text>
-          <Text style={styles.salaryValue}>R$ 2.500,00</Text>
+          <Text style={styles.cardSubtitle}>Informações salariais</Text>
+          <Text style={styles.salaryValue}>Não informado pelo RH</Text>
         </View>
 
         <View style={styles.cardFooter}>
@@ -57,18 +84,30 @@ export default function DadosTrabalhistas() {
       <View style={styles.card}>
         <View style={styles.cardContent}>
           <Text style={styles.cardTitle}>carga horária</Text>
-          <Text style={styles.cardSubtitle}>horas trabalhadas hoje</Text>
+          <Text style={styles.cardSubtitle}>
+            {ultimoPonto
+              ? `Último registro: ${new Date(ultimoPonto.data_ponto).toLocaleDateString("pt-BR")}`
+              : "Sem registros de ponto hoje"}
+          </Text>
         </View>
 
         <View style={styles.cardFooter}>
-          <View style={styles.badgeGroup}>
-            <View style={styles.darkBadge}>
-              <Text style={styles.darkBadgeText}>{data}</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#2A5768" />
+          ) : (
+            <View style={styles.badgeGroup}>
+              <View style={styles.darkBadge}>
+                <Text style={styles.darkBadgeText}>
+                  Entrada: {ultimoPonto?.entrada || "--:--"}
+                </Text>
+              </View>
+              <View style={styles.lightBadge}>
+                <Text style={styles.lightBadgeText}>
+                  Total: {ultimoPonto?.total_dia || "00:00:00"}
+                </Text>
+              </View>
             </View>
-            <View style={styles.lightBadge}>
-              <Text style={styles.lightBadgeText}>{hora}</Text>
-            </View>
-          </View>
+          )}
           <Ionicons name="chevron-down" size={20} color="#1C1B1F" />
         </View>
       </View>
@@ -77,7 +116,7 @@ export default function DadosTrabalhistas() {
       <View style={styles.card}>
         <View style={styles.cardContent}>
           <Text style={styles.cardTitle}>folgas</Text>
-          <Text style={styles.cardSubtitle}>semana do dia {data}</Text>
+          <Text style={styles.cardSubtitle}>Sem folgas programadas para a semana</Text>
         </View>
 
         <View style={styles.cardFooter}>

@@ -129,10 +129,12 @@ export class AuthService {
     const customPermissions = user.permissions?.map((p) => p.nome) || [];
     const allPermissions = Array.from(new Set([...rolePermissions, ...customPermissions]));
 
+    const userType = isCompanyMaster ? 'company' : 'user';
     const payload = {
       sub: user.id,
       empresa_id: user.empresa_id,
       role: user.role?.nome || 'Funcionário',
+      type: userType,
       permissions: allPermissions,
     };
 
@@ -265,10 +267,12 @@ export class AuthService {
     const customPermissions = savedUser.permissions?.map((p) => p.nome) || [];
     const allPermissions = Array.from(new Set([...rolePermissions, ...customPermissions]));
 
+    const userType = savedUser.role?.nome === 'Administrador Master' ? 'company' : 'user';
     const payload = {
       sub: savedUser.id,
       empresa_id: savedUser.empresa_id,
       role: savedUser.role?.nome || 'Funcionário',
+      type: userType,
       permissions: allPermissions,
     };
 
@@ -347,11 +351,12 @@ export class AuthService {
     return {
       status: 'success',
       message: 'Se o e-mail estiver cadastrado, as instruções foram enviadas.',
-      // Retornamos os dados em ambiente de desenvolvimento para facilitar o teste local
-      _dev_: {
-        code,
-        token: rawToken,
-      },
+      ...(process.env.NODE_ENV !== 'production' && {
+        _dev_: {
+          code,
+          token: rawToken,
+        },
+      }),
     };
   }
 }

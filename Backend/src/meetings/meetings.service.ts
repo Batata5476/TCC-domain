@@ -90,15 +90,13 @@ export class MeetingsService {
   }
 
   async create(createMeetingDto: CreateMeetingDto, caller: any) {
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
-
-    if (!isCompanyAdmin) {
-      throw new ForbiddenException('Apenas empresas podem criar reunioes');
-    }
+    const rawParticipants =
+      createMeetingDto.participants && createMeetingDto.participants.length > 0
+        ? createMeetingDto.participants
+        : [caller.sub];
 
     const participantIds = await this.validateParticipantsBelongToCompany(
-      createMeetingDto.participants,
+      rawParticipants,
       caller.empresa_id,
     );
 
@@ -125,7 +123,7 @@ export class MeetingsService {
 
     return {
       status: 'success',
-      message: 'Reuniao agendada e participantes vinculados com sucesso',
+      message: 'Reunião agendada com sucesso',
       data: savedMeeting,
     };
   }

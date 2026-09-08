@@ -200,11 +200,12 @@ export class UsersService {
       status: 'success',
       message: 'Funcionário cadastrado com sucesso e e-mail de ativação gerado',
       data: saved,
-      // Retornar as chaves cruas em dev para testes fáceis na tela/insomnia
-      _dev_: {
-        code,
-        token: rawToken,
-      },
+      ...(process.env.NODE_ENV !== 'production' && {
+        _dev_: {
+          code,
+          token: rawToken,
+        },
+      }),
     };
   }
 

@@ -58,9 +58,9 @@ export default function CadastroEmpresa() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          nome_empresa: nome,
-          cnpj_empresa: cleanCnpj,
-          email_empresa: email,
+          nome,
+          cnpj: cleanCnpj,
+          email,
           tipo_empresa: tipo,
           senha_empresa: senha,
         }),

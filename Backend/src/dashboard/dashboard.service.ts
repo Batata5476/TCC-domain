@@ -22,13 +22,14 @@ export class DashboardService {
   async getUserDashboard(userId: number) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
+      relations: ['setor'],
     });
 
     if (!user) {
       throw new NotFoundException(`Funcionário com ID ${userId} não encontrado`);
     }
 
-    // Conta tarefas associadas a este funcionário que estão pendentes (status = 3) ou em andamento (status = 2)
+    // Conta tarefas associadas a este funcionário que estão pendentes (status = 3 ou 2)
     const associations = await this.funcTarefaRepository.find({
       where: { fk_id_func: userId },
       relations: ['tarefa'],
@@ -50,8 +51,12 @@ export class DashboardService {
         id: user.id,
         nome: user.nome,
         email: user.email,
+        cpf: user.cpf,
+        telefone: user.telefone || null,
+        cargo: user.cargo || null,
+        setor: user.setor ? user.setor.nome : null,
         pontos: user.pontos_acumulados || 0,
-        foto: user.foto_func,
+        foto: user.foto_func || user.foto || null,
         tarefasPendentes: pendingTasksCount,
         tarefasConcluidas: completedTasksCount,
       },
@@ -59,46 +64,75 @@ export class DashboardService {
   }
 
   async getCompanyDashboard(companyId: number) {
-    const totalFuncionarios = await this.userRepository.count({
+    const companyUsers = await this.userRepository.find({
       where: { empresa_id: companyId },
+      select: ['id'],
     });
 
-    const totalTarefas = await this.taskRepository.count();
+    const totalFuncionarios = companyUsers.length;
+    const userIds = companyUsers.map((u) => u.id);
 
-    const tarefasPendentes = await this.taskRepository.count({
-      where: { status_tarefa: 3 }, // 3 = pendente
+    // Contar tarefas ligadas à empresa através de FuncTarefa
+    const companyTaskAssocs = await this.funcTarefaRepository.find({
+      where: { fk_cod_empresa: companyId },
+      relations: ['tarefa'],
     });
 
-    const tarefasConcluidas = await this.taskRepository.count({
-      where: { status_tarefa: 1 }, // 1 = concluida
+    // Remover duplicatas de tarefas
+    const uniqueTasksMap = new Map<number, Task>();
+    companyTaskAssocs.forEach((assoc) => {
+      if (assoc.tarefa) {
+        uniqueTasksMap.set(assoc.tarefa.pk_id_tarefas, assoc.tarefa);
+      }
     });
 
-    // Dashboard V3 - Humor
-    const humorMedioRaw = await this.humorRepository
-      .createQueryBuilder('humor')
-      .select('AVG(humor.humor_func)', 'media')
-      .getRawOne();
+    const companyTasks = Array.from(uniqueTasksMap.values());
+    const totalTarefas = companyTasks.length;
+    const tarefasPendentes = companyTasks.filter(
+      (t) => t.status_tarefa === 3 || t.status_tarefa === 2,
+    ).length;
+    const tarefasConcluidas = companyTasks.filter(
+      (t) => t.status_tarefa === 1,
+    ).length;
 
-    const humorMedio = Number(humorMedioRaw.media || 0).toFixed(1);
+    // Humor filtrado pelos usuários da empresa
+    let humorMedio = '0.0';
+    let totalHumores = 0;
+    let ultimoHumor: Humor | null = null;
 
-    const ultimoHumor = await this.humorRepository.findOne({
-      where: {},
-      order: {
-        dth_humor: 'DESC',
-      },
-    });
+    if (userIds.length > 0) {
+      const humorMedioRaw = await this.humorRepository
+        .createQueryBuilder('humor')
+        .select('AVG(humor.humor_func)', 'media')
+        .where('humor.fk_id_func IN (:...userIds)', { userIds })
+        .getRawOne();
 
-    const totalHumores = await this.humorRepository.count();
+      humorMedio = Number(humorMedioRaw?.media || 0).toFixed(1);
+
+      totalHumores = await this.humorRepository
+        .createQueryBuilder('humor')
+        .where('humor.fk_id_func IN (:...userIds)', { userIds })
+        .getCount();
+
+      ultimoHumor = await this.humorRepository
+        .createQueryBuilder('humor')
+        .where('humor.fk_id_func IN (:...userIds)', { userIds })
+        .orderBy('humor.dth_humor', 'DESC')
+        .getOne();
+    }
 
     return {
-      totalFuncionarios,
-      totalTarefas,
-      tarefasPendentes,
-      tarefasConcluidas,
-      humor: {
-        media: humorMedio,
-        totalRegistros: totalHumores,
-        ultimoRegistro: ultimoHumor,
+      status: 'success',
+      data: {
+        totalFuncionarios,
+        totalTarefas,
+        tarefasPendentes,
+        tarefasConcluidas,
+        humor: {
+          media: humorMedio,
+          totalRegistros: totalHumores,
+          ultimoRegistro: ultimoHumor,
+        },
       },
     };
   }

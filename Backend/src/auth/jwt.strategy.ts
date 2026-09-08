@@ -16,9 +16,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // The returned object is injected as req.user in every guarded route
   async validate(payload: JwtPayload) {
     return {
+      userId: payload.sub,
       sub: payload.sub,
       empresa_id: payload.empresa_id,
       role: payload.role,
+      type: payload.type || (payload.role === 'Administrador Master' ? 'company' : 'user'),
       permissions: payload.permissions,
     };
   }

@@ -84,18 +84,40 @@ export class WorkService {
     };
   }
 
+  private calculateTotalDia(entrada?: string, saida?: string): string {
+    if (!entrada || !saida) return '00:00:00';
+    const [h1, m1, s1 = 0] = entrada.split(':').map(Number);
+    const [h2, m2, s2 = 0] = saida.split(':').map(Number);
+
+    if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return '00:00:00';
+
+    const startSec = h1 * 3600 + m1 * 60 + Number(s1);
+    const endSec = h2 * 3600 + m2 * 60 + Number(s2);
+
+    let diffSec = endSec - startSec;
+    if (diffSec < 0) diffSec += 24 * 3600; // Virada de dia
+
+    const hours = Math.floor(diffSec / 3600);
+    const mins = Math.floor((diffSec % 3600) / 60);
+    const secs = diffSec % 60;
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+  }
+
   async create(createWorkDto: CreateWorkDto, caller: any) {
     if (caller.role !== 'Funcionário') {
       throw new ForbiddenException('Apenas funcionarios podem criar registros de ponto');
     }
 
     const callerId = caller.sub;
+    const totalDia = this.calculateTotalDia(createWorkDto.entrada, createWorkDto.saida);
 
     const work = this.workRepository.create({
       entrada: createWorkDto.entrada,
       saida: createWorkDto.saida,
       data_ponto: new Date(createWorkDto.data_ponto),
-      total_dia: '00:00:00',
+      total_dia: totalDia,
       fk_id_func: callerId,
     });
 
@@ -124,6 +146,8 @@ export class WorkService {
     if (updateDto.data_ponto !== undefined) {
       work.data_ponto = new Date(updateDto.data_ponto);
     }
+
+    work.total_dia = this.calculateTotalDia(work.entrada, work.saida);
 
     const updated = await this.workRepository.save(work);
 
