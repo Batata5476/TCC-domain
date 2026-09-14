@@ -5,11 +5,13 @@ import { ChatService } from './chat.service';
 import { Message } from './entities/message.entity';
 import { Chat } from './entities/chat.entity';
 import { ChatParticipant } from './entities/chat-participant.entity';
+import { RolesGuard } from '../auth/roles.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Message, Chat, ChatParticipant])],
   controllers: [ChatController],
-  providers: [ChatService],
+  providers: [ChatService, RolesGuard, PermissionsGuard],
   exports: [ChatService],
 })
 export class ChatModule {}

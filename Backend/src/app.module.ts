@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'; // Import ThrottlerModule and ThrottlerGuard for rate limiting
-import { APP_GUARD } from '@nestjs/core'; // Import APP_GUARD to apply the ThrottlerGuard globally
+import { APP_GUARD } from '@nestjs/core'; // Import APP_GUARD to apply guards globally
 
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';

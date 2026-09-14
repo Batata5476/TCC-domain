@@ -6,6 +6,7 @@ import { Company } from './entities/company.entity';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../users/entities/role.entity';
+import { ROLES } from '../auth/authorization.constants';
 
 @Injectable()
 export class CompanyService {
@@ -80,7 +81,7 @@ export class CompanyService {
 
     // 2. Criar correspondente usuário master na tabela 'usuario'
     const adminRole = await this.roleRepository.findOne({
-      where: { nome: 'Administrador Master' },
+      where: { nome: ROLES.MASTER_ADMIN },
     });
     if (!adminRole) {
       throw new NotFoundException('Role Administrador Master não encontrada no banco');
@@ -98,7 +99,7 @@ export class CompanyService {
       senha: hashedPassword,
       status: 'ACTIVE',
       primeiro_acesso: false,
-      cargo: 'Administrador Master',
+      cargo: ROLES.MASTER_ADMIN,
     });
     await this.userRepository.save(masterUser);
 

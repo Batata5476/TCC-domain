@@ -1,8 +1,19 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import { API_URL } from './config';
 
 // ─── Token Storage ────────────────────────────────────────────────────────────
+
+export async function clearSession() {
+  if (Platform.OS === 'web') {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user_type');
+  } else {
+    await SecureStore.deleteItemAsync('access_token');
+    await SecureStore.deleteItemAsync('user_type');
+  }
+}
 
 export async function saveToken(token: string) {
   if (Platform.OS === 'web') {
@@ -35,12 +46,15 @@ export async function getUserType(): Promise<string | null> {
 }
 
 export async function logout() {
-  if (Platform.OS === 'web') {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user_type');
-  } else {
-    await SecureStore.deleteItemAsync('access_token');
-    await SecureStore.deleteItemAsync('user_type');
+  await clearSession();
+}
+
+export async function handleSessionExpired() {
+  await logout();
+  try {
+    router.replace('/');
+  } catch {
+    // fallback silencioso para ambientes sem router ativo
   }
 }
 
@@ -116,7 +130,10 @@ export async function activateFirstAccess(
   }
 
   const accessToken = data.data.access_token;
+  const sessionType = data.data.type as 'company' | 'user';
+
   await saveToken(accessToken);
+  await saveUserType(sessionType);
 
   return data.data as LoginResult;
 }

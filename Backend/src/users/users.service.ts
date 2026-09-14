@@ -9,6 +9,7 @@ import { Permission } from './entities/permission.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditService } from '../audit/audit.service';
+import { isAdminRole } from '../auth/authorization.constants';
 
 @Injectable()
 export class UsersService {
@@ -45,8 +46,7 @@ export class UsersService {
     }
 
     // Admins da mesma empresa têm acesso. Usuários comuns só têm acesso a si mesmos.
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (isCompanyAdmin) {
       if (targetUser.empresa_id !== caller.empresa_id) {
@@ -62,8 +62,7 @@ export class UsersService {
   }
 
   async findAll(caller: any) {
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       throw new ForbiddenException('Você não possui permissão para listar todos os usuários');
@@ -98,8 +97,7 @@ export class UsersService {
   }
 
   async create(createUserDto: CreateUserDto, caller: any) {
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       throw new ForbiddenException('Você não possui permissão para cadastrar funcionários');
@@ -176,43 +174,29 @@ export class UsersService {
 
     const saved = await this.usersRepository.save(user);
 
-    // Auditoria
-    await this.auditService.log({
-      usuario_id: caller.sub,
-      empresa_id: caller.empresa_id,
-      acao: 'USER_CREATED',
-      entidade: 'User',
-      entidade_id: saved.id,
-      detalhes: `Funcionário ${saved.nome} criado com role ${role.nome} e código de ativação ${code}`,
-    });
-
-    // Simulação de envio de e-mail com dados de ativação
-    console.log('\n---------------- MOCK EMAIL DE CADASTRO DE FUNCIONÁRIO ----------------');
-    console.log(`Para: ${saved.email}`);
-    console.log(`Olá, ${saved.nome}! Você foi cadastrado na empresa.`);
-    console.log(`Use as informações abaixo para seu primeiro acesso:`);
-    console.log(`Código de ativação: ${code}`);
-    console.log(`Token: ${rawToken}`);
-    console.log(`Link direto: http://localhost:8081/primeiro-acesso?code=${code}&token=${rawToken}`);
-    console.log('------------------------------------------------------------------------\n');
-
     return {
       status: 'success',
-      message: 'Funcionário cadastrado com sucesso e e-mail de ativação gerado',
-      data: saved,
-      ...(process.env.NODE_ENV !== 'production' && {
-        _dev_: {
-          code,
-          token: rawToken,
-        },
-      }),
+      message: 'Funcionário cadastrado com sucesso. As instruções de ativação serão enviadas por e-mail.',
+      data: {
+        id: saved.id,
+        nome: saved.nome,
+        email: saved.email,
+        cpf: saved.cpf,
+        cargo: saved.cargo,
+        setor_id: saved.setor_id,
+        role_id: saved.role_id,
+        empresa_id: saved.empresa_id,
+        status: saved.status,
+        primeiro_acesso: saved.primeiro_acesso,
+        telefone: saved.telefone,
+        foto: saved.foto,
+      },
     };
   }
 
   async update(id: number, updateUserDto: UpdateUserDto, caller: any) {
     const targetUser = await this.validateUserAccess(id, caller);
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     // Se for usuário comum, só pode editar campos específicos (nome, email, foto, senha, telefone)
     if (!isCompanyAdmin) {
@@ -308,8 +292,7 @@ export class UsersService {
   }
 
   async remove(id: number, caller: any) {
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas administradores podem remover funcionários');

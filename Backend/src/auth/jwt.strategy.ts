@@ -13,15 +13,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  // The returned object is injected as req.user in every guarded route
-  async validate(payload: JwtPayload) {
+  // o método validate é chamado automaticamente pelo Passport após ser verifcado o token JWT.
+  // Ele recebe o payLoad do token decodificado e retorna o objeto que será anexado ao request.user.
+  async validate(payload: JwtPayload): Promise<JwtPayload> {
     return {
-      userId: payload.sub,
       sub: payload.sub,
       empresa_id: payload.empresa_id,
       role: payload.role,
       type: payload.type || (payload.role === 'Administrador Master' ? 'company' : 'user'),
       permissions: payload.permissions,
+      iat: payload.iat,
+      exp: payload.exp,
     };
   }
 }

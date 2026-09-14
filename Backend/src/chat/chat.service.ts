@@ -5,6 +5,7 @@ import { CreateMessageDto } from './dto/create-message.dto';
 import { Message } from './entities/message.entity';
 import { Chat } from './entities/chat.entity';
 import { ChatParticipant } from './entities/chat-participant.entity';
+import { ROLES } from '../auth/authorization.constants';
 
 @Injectable()
 export class ChatService {
@@ -18,11 +19,11 @@ export class ChatService {
   ) {}
 
   private async validateChatAccess(chatId: number, caller: any): Promise<Chat> {
-    if (caller.type !== 'user') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionarios participantes podem acessar o chat');
     }
 
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
 
     const chat = await this.chatRepository.findOne({
       where: { pk_id_chat: chatId },
@@ -61,11 +62,11 @@ export class ChatService {
   }
 
   async findAll(caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionarios participantes podem listar mensagens');
     }
 
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
 
     const messages = await this.messageRepository.createQueryBuilder('message')
       .innerJoin(
@@ -93,11 +94,11 @@ export class ChatService {
   }
 
   async create(createMessageDto: CreateMessageDto, caller: any) {
-    if (caller.type !== 'user') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionarios participantes podem enviar mensagens');
     }
 
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
 
     await this.validateChatAccess(createMessageDto.fk_id_chat, caller);
 
@@ -120,7 +121,7 @@ export class ChatService {
 
   async remove(id: number, caller: any) {
     const message = await this.validateMessageAccess(id, caller);
-    const callerId = caller.userId || caller.sub;
+    const callerId = caller.sub;
 
     if (message.fk_id_func !== callerId) {
       throw new ForbiddenException('Voce so pode remover mensagens enviadas por voce');

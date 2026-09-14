@@ -5,6 +5,7 @@ import { Occurrence } from './entities/occurrence.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateOccurrenceDto } from './dto/create-occurrence.dto';
 import { UpdateOccurrenceDto } from './dto/update-occurrence.dto';
+import { isAdminRole, ROLES } from '../auth/authorization.constants';
 
 @Injectable()
 export class OccurrencesService {
@@ -18,7 +19,7 @@ export class OccurrencesService {
   private async validateOccurrenceAccess(occurrenceId: number, caller: any): Promise<Occurrence> {
     const callerId = caller.sub;
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     const occurrence = await this.occurrenceRepository.findOne({
       where: { pk_id_his_medico: occurrenceId },
@@ -46,7 +47,7 @@ export class OccurrencesService {
   }
 
   async create(createOccurrenceDto: CreateOccurrenceDto, caller: any) {
-    if (caller.role !== 'Funcionário') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionários podem registrar ocorrências médicas');
     }
 
@@ -70,7 +71,7 @@ export class OccurrencesService {
   async findAll(caller: any) {
     const callerId = caller.sub;
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       const occurrences = await this.occurrenceRepository.find({
@@ -104,7 +105,7 @@ export class OccurrencesService {
   }
 
   async update(id: number, updateDto: UpdateOccurrenceDto, caller: any) {
-    if (caller.role !== 'Funcionário') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionários podem atualizar seus registros médicos');
     }
 
@@ -127,7 +128,7 @@ export class OccurrencesService {
   }
 
   async remove(id: number, caller: any) {
-    if (caller.role !== 'Funcionário') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionários podem excluir seus registros médicos');
     }
 

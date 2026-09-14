@@ -48,13 +48,13 @@ export class User {
   @Column({ default: true })
   primeiro_acesso: boolean;
 
-  @Column({ nullable: true, unique: true })
+  @Column({ nullable: true, unique: true, select: false }) // select false para não retornar nenhum código de ativação no backend
   activation_code: string;
 
   @Column({ nullable: true, select: false })
   token: string;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true, select: false }) // Aqui tambem para não retornar a data de expiração do token no backend
   token_expiracao: Date;
 
   @Column({ default: 0 })

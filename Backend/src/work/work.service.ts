@@ -5,6 +5,7 @@ import { CreateWorkDto } from './dto/create-work.dto';
 import { UpdateWorkDto } from './dto/update-work.dto';
 import { Work } from './entities/work.entity';
 import { User } from '../users/entities/user.entity';
+import { isAdminRole, ROLES } from '../auth/authorization.constants';
 
 @Injectable()
 export class WorkService {
@@ -17,8 +18,7 @@ export class WorkService {
 
   private async validateWorkAccess(workId: number, caller: any): Promise<Work> {
     const callerId = caller.sub;
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     const work = await this.workRepository.findOne({
       where: { pk_id_ponto: workId },
@@ -47,8 +47,7 @@ export class WorkService {
 
   async findAll(caller: any) {
     const callerId = caller.sub;
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       const registros = await this.workRepository.find({
@@ -106,7 +105,7 @@ export class WorkService {
   }
 
   async create(createWorkDto: CreateWorkDto, caller: any) {
-    if (caller.role !== 'Funcionário') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionarios podem criar registros de ponto');
     }
 
@@ -131,7 +130,7 @@ export class WorkService {
   }
 
   async update(id: number, updateDto: UpdateWorkDto, caller: any) {
-    if (caller.role !== 'Funcionário') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionarios podem atualizar seus registros de ponto');
     }
 
@@ -159,7 +158,7 @@ export class WorkService {
   }
 
   async remove(id: number, caller: any) {
-    if (caller.role !== 'Funcionário') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionarios podem excluir seus registros de ponto');
     }
 

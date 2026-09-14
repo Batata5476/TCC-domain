@@ -4,6 +4,7 @@ import { Repository, Between } from 'typeorm';
 import { Humor } from './entities/humor.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateWellbeingDto } from './dto/create-wellbeing.dto';
+import { isAdminRole, ROLES } from '../auth/authorization.constants';
 
 @Injectable()
 export class WellbeingService {
@@ -17,7 +18,7 @@ export class WellbeingService {
   private async validateWellbeingAccess(humorId: number, caller: any): Promise<Humor> {
     const callerId = caller.sub;
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     const humor = await this.humorRepository.findOne({
       where: { pk_id_humor: humorId },
@@ -45,7 +46,7 @@ export class WellbeingService {
   }
 
   async create(createWellbeingDto: CreateWellbeingDto, caller: any) {
-    if (caller.role !== 'Funcionário') {
+    if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionários podem registrar humor');
     }
     const callerId = caller.sub;
@@ -84,7 +85,7 @@ export class WellbeingService {
   async findAll(caller: any) {
     const callerId = caller.sub;
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       const humores = await this.humorRepository.find({

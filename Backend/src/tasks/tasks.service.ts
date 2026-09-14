@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { FuncTarefa } from './entities/func-tarefa.entity';
 import { User } from '../users/entities/user.entity';
+import { isAdminRole } from '../auth/authorization.constants';
 
 @Injectable()
 export class TasksService {
@@ -19,7 +20,7 @@ export class TasksService {
   private async validateTaskAccess(taskId: number, caller: any): Promise<FuncTarefa> {
     const callerId = caller.sub;
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     const relations = await this.funcTarefaRepository.find({
       where: { fk_id_tarefa: taskId },
@@ -54,7 +55,7 @@ export class TasksService {
     caller: any,
   ) {
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     const callerId = caller.empresa_id;
 
@@ -171,7 +172,7 @@ export class TasksService {
     }
 
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     // Regras de transição de status
     // Funcionários: 3→2, 2→1, 3→1 (conclusão direta permitida)
@@ -231,7 +232,7 @@ export class TasksService {
 
   async remove(id: number, caller: any) {
     const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+      isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem excluir tarefas');

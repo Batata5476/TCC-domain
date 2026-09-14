@@ -24,32 +24,32 @@
 
 ### JWT e identidade
 
-- [ ] Definir payload unico com `sub`, `empresa_id`, `role`, `permissions` e, se necessario, `type`.
-- [ ] Remover dependencia de `caller.type` no chat ou passar esse campo de forma consistente.
-- [ ] Usar sempre `sub` como ID do usuario; eliminar alternancia entre `userId` e `sub`.
-- [ ] Garantir que o tipo salvo no frontend corresponda ao role real do token.
-- [ ] Validar `JWT_SECRET` na inicializacao; impedir servidor com segredo ausente ou inseguro.
-- [ ] Validar variaveis obrigatorias de banco, porta e ambiente na inicializacao.
-- [ ] Centralizar expiracao, logout, redirecionamento e invalidacao de sessao.
+- [x] Definir payload unico com `sub`, `empresa_id`, `role`, `permissions` e, se necessario, `type`.
+- [x] Remover dependencia de `caller.type` no chat ou passar esse campo de forma consistente.
+- [x] Usar sempre `sub` como ID do usuario; eliminar alternancia entre `userId` e `sub`.
+- [x] Garantir que o tipo salvo no frontend corresponda ao role real do token.
+- [x] Validar `JWT_SECRET` na inicializacao; impedir servidor com segredo ausente ou inseguro.
+- [x] Validar variaveis obrigatorias de banco, porta e ambiente na inicializacao.
+- [x] Centralizar expiracao, logout, redirecionamento e invalidacao de sessao.
 
 ### Credenciais e recuperacao
 
-- [ ] Remover logs de token, codigo de ativacao e codigo de recuperacao em `auth.service.ts` e `users.service.ts`.
-- [ ] Remover ou proteger o campo `_dev_` retornado no cadastro de funcionario.
+- [x] Remover logs de token, codigo de ativacao e codigo de recuperacao em `auth.service.ts` e `users.service.ts`.
+- [x] Remover ou proteger o campo `_dev_` retornado no cadastro de funcionario.
 - [ ] Substituir e-mail simulado por integracao real ou restringir claramente ao ambiente de desenvolvimento.
-- [ ] Remover codigos e segredos dos detalhes de auditoria.
-- [ ] Aplicar no cadastro de empresa a mesma politica de senha usada no primeiro acesso.
-- [ ] Definir limite de tentativas para login, primeiro acesso e recuperacao.
-- [ ] Manter resposta generica para e-mail inexistente na recuperacao.
+- [x] Remover codigos e segredos dos detalhes de auditoria.
+- [] Aplicar no cadastro de empresa a mesma politica de senha usada no primeiro acesso.
+- [x] Definir limite de tentativas para login, primeiro acesso e recuperacao.
+- [x] Manter resposta generica para e-mail inexistente na recuperacao.
 
 ### Roles e permissoes
 
-- [ ] Centralizar autorizacao em guard, decorator ou helper.
-- [ ] Parar de espalhar comparacoes literais de `Administrador Master`, `Administrador` e `Funcionario`.
-- [ ] Definir se `permissions` do JWT serao usadas de verdade; hoje varias rotas ignoram essas permissoes.
-- [ ] Fazer permissoes customizadas protegerem rotas ou remover essa opcao da interface.
-- [ ] Padronizar nomes de roles, acentuacao e valores em seed, banco, backend e frontend.
-- [ ] Revisar toda rota protegida para validar usuario, empresa e permissao.
+- [x] Centralizar autorizacao em guard, decorator ou helper.
+- [x] Parar de espalhar comparacoes literais de `Administrador Master`, `Administrador` e `Funcionario`.
+- [x] Definir se `permissions` do JWT serao usadas de verdade; hoje varias rotas ignoram essas permissoes.
+- [x] Fazer permissoes customizadas protegerem rotas ou remover essa opcao da interface.
+- [x] Padronizar nomes de roles, acentuacao e valores em seed, banco, backend e frontend.
+- [x] Revisar toda rota protegida para validar usuario, empresa e permissao.
 
 ---
 

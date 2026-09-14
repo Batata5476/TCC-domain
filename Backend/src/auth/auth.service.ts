@@ -7,12 +7,17 @@ import { LoginDto } from './dto/login.dto';
 import { ValidateFirstAccessDto } from './dto/validate-first-access.dto';
 import { ActivateFirstAccessDto } from './dto/activate-first-access.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { Company } from '../company/entities/company.entity';
 import { User } from '../users/entities/user.entity';
 import { AuditService } from '../audit/audit.service';
+import { AuthorizationService } from './authorization.service';
+import { ROLES } from './authorization.constants';
+
 
 @Injectable()
 export class AuthService {
+
   constructor(
     @InjectRepository(Company)
     private companyRepository: Repository<Company>,
@@ -20,8 +25,20 @@ export class AuthService {
     private userRepository: Repository<User>,
     private jwtService: JwtService,
     private auditService: AuditService,
+    private authorizationService: AuthorizationService,
   ) {}
 
+  private createJwtPayload(user: User, permissions: string[]): JwtPayload {
+    const type = user.role?.nome === ROLES.MASTER_ADMIN ? 'company' : 'user';
+
+    return {
+      sub: user.id,
+      empresa_id: user.empresa_id,
+      role: user.role?.nome || ROLES.EMPLOYEE,
+      type,
+      permissions,
+    };
+  }
   private generateRandomCode(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -67,7 +84,7 @@ export class AuthService {
           .leftJoinAndSelect('user.role', 'role')
           .leftJoinAndSelect('role.permissions', 'role_permissions')
           .where('user.empresa_id = :empresaId', { empresaId: company.id })
-          .andWhere('role.nome = :roleName', { roleName: 'Administrador Master' })
+          .andWhere('role.nome = :roleName', { roleName: ROLES.MASTER_ADMIN })
           .addSelect('user.senha')
           .getOne();
 
@@ -124,19 +141,14 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    // Coleta todas as permissões (permissões da role + permissões customizadas adicionais)
-    const rolePermissions = user.role?.permissions?.map((p) => p.nome) || [];
-    const customPermissions = user.permissions?.map((p) => p.nome) || [];
-    const allPermissions = Array.from(new Set([...rolePermissions, ...customPermissions]));
-
-    const userType = isCompanyMaster ? 'company' : 'user';
-    const payload = {
-      sub: user.id,
-      empresa_id: user.empresa_id,
-      role: user.role?.nome || 'Funcionário',
-      type: userType,
-      permissions: allPermissions,
-    };
+    // Centraliza a combinação das permissões da role e do usuário.
+    const rolePermissions = user.role?.permissions || [];
+    const customPermissions = user.permissions || [];
+    const allPermissions = this.authorizationService.getPermissions(
+      rolePermissions,
+      customPermissions,
+    );
+    const payload = this.createJwtPayload(user, allPermissions);
 
     const token = this.jwtService.sign(payload);
 
@@ -149,7 +161,7 @@ export class AuthService {
       entidade_id: user.id,
       ip,
       user_agent: userAgent,
-      detalhes: `Usuário autenticado com sucesso. Role: ${user.role?.nome || 'Funcionário'}`,
+      detalhes: `Usuário autenticado com sucesso. Role: ${user.role?.nome || ROLES.EMPLOYEE}`,
     });
 
     return {
@@ -162,7 +174,7 @@ export class AuthService {
           id: user.id,
           nome: user.nome,
           email: user.email,
-          role: user.role?.nome || 'Funcionário',
+          role: user.role?.nome || ROLES.EMPLOYEE,
           permissions: allPermissions,
         },
       },
@@ -263,18 +275,15 @@ export class AuthService {
     });
 
     // Login direto
-    const rolePermissions = savedUser.role?.permissions?.map((p) => p.nome) || [];
-    const customPermissions = savedUser.permissions?.map((p) => p.nome) || [];
-    const allPermissions = Array.from(new Set([...rolePermissions, ...customPermissions]));
+    const rolePermissions = savedUser.role?.permissions || [];
+    const customPermissions = savedUser.permissions || [];
+    const allPermissions = this.authorizationService.getPermissions(
+      rolePermissions,
+      customPermissions,
+    );
 
-    const userType = savedUser.role?.nome === 'Administrador Master' ? 'company' : 'user';
-    const payload = {
-      sub: savedUser.id,
-      empresa_id: savedUser.empresa_id,
-      role: savedUser.role?.nome || 'Funcionário',
-      type: userType,
-      permissions: allPermissions,
-    };
+    const payload = this.createJwtPayload(savedUser, allPermissions);
+
 
     const accessToken = this.jwtService.sign(payload);
 
@@ -283,12 +292,12 @@ export class AuthService {
       message: 'Senha cadastrada e conta ativada com sucesso',
       data: {
         access_token: accessToken,
-        type: savedUser.role?.nome === 'Administrador Master' ? 'company' : 'user',
+        type: savedUser.role?.nome === ROLES.MASTER_ADMIN ? 'company' : 'user',
         user: {
           id: savedUser.id,
           nome: savedUser.nome,
           email: savedUser.email,
-          role: savedUser.role?.nome || 'Funcionário',
+          role: savedUser.role?.nome || ROLES.EMPLOYEE,
           permissions: allPermissions,
         },
       },
@@ -302,16 +311,12 @@ export class AuthService {
       where: { email: email.trim() },
     });
 
-    // Se o usuário não existir, retornamos sucesso genérico por motivos de segurança
-    if (!user) {
+    // Não revelar se o e-mail existe ou se a conta está bloqueada/removida.
+    if (!user || user.status === 'DELETED' || user.status === 'BLOCKED') {
       return {
         status: 'success',
         message: 'Se o e-mail estiver cadastrado, as instruções foram enviadas.',
       };
-    }
-
-    if (user.status === 'DELETED' || user.status === 'BLOCKED') {
-      throw new BadRequestException('Esta conta está suspensa ou inativa.');
     }
 
     const rawToken = this.generateRandomCode(); // ex: F7KQ-29MA
@@ -324,39 +329,10 @@ export class AuthService {
     user.token_expiracao = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
     await this.userRepository.save(user);
-
-    // Auditoria de solicitação de recuperação
-    await this.auditService.log({
-      usuario_id: user.id,
-      empresa_id: user.empresa_id,
-      acao: 'PASSWORD_RESET_REQUESTED',
-      entidade: 'User',
-      entidade_id: user.id,
-      ip,
-      user_agent: userAgent,
-      detalhes: `Solicitação de redefinição de senha gerada. Código de Ativação: ${code}`,
-    });
-
-    // Simulação de envio de e-mail (escreve no log do console/terminal)
-    console.log('\n---------------- MOCK EMAIL DE RECUPERAÇÃO ----------------');
-    console.log(`Para: ${user.email}`);
-    console.log(`Olá, ${user.nome}! Você solicitou a redefinição de sua senha.`);
-    console.log(`Use as informações abaixo para redefinir sua senha:`);
-    console.log(`Código de ativação: ${code}`);
-    console.log(`Token: ${rawToken}`);
-    console.log(`Este código expira em 48 horas.`);
-    console.log(`Link direto: http://localhost:8081/redefinir-senha?code=${code}&token=${rawToken}`);
-    console.log('------------------------------------------------------------\n');
-
+    
     return {
       status: 'success',
       message: 'Se o e-mail estiver cadastrado, as instruções foram enviadas.',
-      ...(process.env.NODE_ENV !== 'production' && {
-        _dev_: {
-          code,
-          token: rawToken,
-        },
-      }),
     };
   }
 }

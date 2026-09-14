@@ -3,19 +3,25 @@ import { TasksService } from './tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { CreateTaskPayloadDto } from './dto/create-task-payload.dto';
+import { RolesGuard } from '../auth/roles.guard';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { ADMIN_ROLES } from '../auth/authorization.constants';
+import { Permissions, Roles } from '../auth/authorization.decorators';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Get('my-tasks')
+  @Permissions('tasks.read')
   async findMyTasks(@Req() req) {
     // Para funcionários (type: 'user')
     return this.tasksService.findAllByEmployee(req.user.sub);
   }
 
   @Post()
+  @Permissions('tasks.create')
   async create(@Req() req, @Body() body: CreateTaskPayloadDto) {
     return this.tasksService.create({
       tipo_tarefa: body.tipo_tarefa,
@@ -26,16 +32,20 @@ export class TasksController {
   }
 
   @Patch(':id/status')
+  @Permissions('tasks.update')
   async updateStatus(@Param('id') id: string, @Body() body: UpdateTaskStatusDto, @Req() req) {
     return this.tasksService.updateStatus(+id, body.status, req.user);
   }
 
   @Get(':id')
+  @Permissions('tasks.read')
   async findOne(@Param('id') id: string, @Req() req) {
     return this.tasksService.findOne(+id, req.user);
   }
 
   @Delete(':id')
+  @Roles(...ADMIN_ROLES)
+  @Permissions('tasks.delete')
   async remove(@Param('id') id: string, @Req() req) {
     return this.tasksService.remove(+id, req.user);
   }

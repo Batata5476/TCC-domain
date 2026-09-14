@@ -11,6 +11,7 @@ import { MeetingParticipant } from './entities/meeting-participant.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
+import { isAdminRole } from '../auth/authorization.constants';
 
 @Injectable()
 export class MeetingsService {
@@ -26,8 +27,7 @@ export class MeetingsService {
 
   private async validateMeetingAccess(meetingId: number, caller: any): Promise<Meeting> {
     const callerId = caller.sub;
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     const meeting = await this.meetingRepository.findOne({
       where: { pk_id_reuniao: meetingId },
@@ -90,10 +90,13 @@ export class MeetingsService {
   }
 
   async create(createMeetingDto: CreateMeetingDto, caller: any) {
-    const rawParticipants =
-      createMeetingDto.participants && createMeetingDto.participants.length > 0
-        ? createMeetingDto.participants
-        : [caller.sub];
+    const isCompanyAdmin = isAdminRole(caller.role);
+
+    if (!isCompanyAdmin) {
+      throw new ForbiddenException('Apenas empresas podem criar reunioes');
+    }
+
+    const rawParticipants = createMeetingDto.participants;
 
     const participantIds = await this.validateParticipantsBelongToCompany(
       rawParticipants,
@@ -130,8 +133,7 @@ export class MeetingsService {
 
   async findAll(caller: any) {
     const callerId = caller.sub;
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       const relations = await this.meetingParticipantRepository.find({
@@ -176,8 +178,7 @@ export class MeetingsService {
   }
 
   async update(id: number, updateDto: UpdateMeetingDto, caller: any) {
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem atualizar reunioes');
@@ -235,8 +236,7 @@ export class MeetingsService {
   }
 
   async remove(id: number, caller: any) {
-    const isCompanyAdmin =
-      caller.role === 'Administrador Master' || caller.role === 'Administrador';
+    const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
       throw new ForbiddenException('Apenas empresas podem excluir reunioes');

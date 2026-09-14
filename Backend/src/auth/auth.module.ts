@@ -8,6 +8,8 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { Company } from '../company/entities/company.entity';
 import { User } from '../users/entities/user.entity';
+import { AuthorizationService } from './authorization.service';
+
 
 @Module({
   imports: [
@@ -16,14 +18,20 @@ import { User } from '../users/entities/user.entity';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '1d' },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const expiresIn = (configService.get<string>('JWT_EXPIRES_IN') ?? '1d') as any;
+
+        return {
+          secret: configService.get<string>('JWT_SECRET'),
+          signOptions: {
+            expiresIn,
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, AuthorizationService],
+  exports: [AuthService, AuthorizationService],
 })
 export class AuthModule {}
