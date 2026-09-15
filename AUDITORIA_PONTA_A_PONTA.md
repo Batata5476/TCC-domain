@@ -36,7 +36,7 @@
 
 - [x] Remover logs de token, codigo de ativacao e codigo de recuperacao em `auth.service.ts` e `users.service.ts`.
 - [x] Remover ou proteger o campo `_dev_` retornado no cadastro de funcionario.
-- [ ] Substituir e-mail simulado por integracao real ou restringir claramente ao ambiente de desenvolvimento.
+- [x] Substituir e-mail simulado por integracao real ou restringir claramente ao ambiente de desenvolvimento.
 - [x] Remover codigos e segredos dos detalhes de auditoria.
 - [] Aplicar no cadastro de empresa a mesma politica de senha usada no primeiro acesso.
 - [x] Definir limite de tentativas para login, primeiro acesso e recuperacao.

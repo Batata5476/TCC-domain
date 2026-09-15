@@ -10,6 +10,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditService } from '../audit/audit.service';
 import { isAdminRole } from '../auth/authorization.constants';
+import { MailService } from '../mail/mail.services';
+
 
 @Injectable()
 export class UsersService {
@@ -23,6 +25,7 @@ export class UsersService {
     @InjectRepository(Permission)
     private permissionRepository: Repository<Permission>,
     private auditService: AuditService,
+    private mailService: MailService,
   ) {}
 
   private generateRandomCode(): string {
@@ -174,6 +177,14 @@ export class UsersService {
 
     const saved = await this.usersRepository.save(user);
 
+    // Dispara o email de boas vindas e primeiro acesso
+    await this.mailService.sendFirstAccessEmail(
+      saved.email,
+      saved.nome,
+      code,
+      rawToken,
+    );
+
     return {
       status: 'success',
       message: 'Funcionário cadastrado com sucesso. As instruções de ativação serão enviadas por e-mail.',
@@ -299,7 +310,7 @@ export class UsersService {
     }
 
     const user = await this.validateUserAccess(id, caller);
-    
+
     // Soft Delete: Define status como DELETED
     user.status = 'DELETED';
     await this.usersRepository.save(user);
@@ -313,6 +324,7 @@ export class UsersService {
       entidade_id: user.id,
       detalhes: `Usuário ${user.nome} (ID: ${user.id}) removido logicamente (Soft Delete)`,
     });
+
 
     return {
       status: 'success',

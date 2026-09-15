@@ -13,6 +13,8 @@ import { User } from '../users/entities/user.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuthorizationService } from './authorization.service';
 import { ROLES } from './authorization.constants';
+import { MailService } from '../mail/mail.services';
+
 
 
 @Injectable()
@@ -26,6 +28,7 @@ export class AuthService {
     private jwtService: JwtService,
     private auditService: AuditService,
     private authorizationService: AuthorizationService,
+    private mailServices: MailService,
   ) {}
 
   private createJwtPayload(user: User, permissions: string[]): JwtPayload {
@@ -329,7 +332,14 @@ export class AuthService {
     user.token_expiracao = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
     await this.userRepository.save(user);
-    
+
+    // Dispara o email real com o código e token gerados
+    await this.mailServices.sendPasswordResetEmail(
+      user.email,
+      user.nome,
+      code,
+      rawToken,
+    );
     return {
       status: 'success',
       message: 'Se o e-mail estiver cadastrado, as instruções foram enviadas.',
