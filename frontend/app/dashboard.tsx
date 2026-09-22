@@ -17,8 +17,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { authenticatedFetch } from "../services/api";
 import { getToken, logout } from "../services/auth";
-import * as ImagePicker from 'expo-image-picker';
-import { API_URL } from '../services/config';
+import * as ImagePicker from "expo-image-picker";
+import { API_URL } from "../services/config";
 
 const cooperaLogo = require("../assets/coopera_logo.png");
 
@@ -50,8 +50,8 @@ type TaskItem = {
   id: number;
   name: string;
   points: string;
-  priority: number; // 1 = Urgente, 2 = Normal
-  status: number;   // 1 = Concluída, 2 = Em andamento, 3 = Pendente
+  priority: number;
+  status: number;
   dueDate: string;
 };
 
@@ -63,19 +63,22 @@ export default function Dashboard() {
   // Estados de UI
   const [open, setOpen] = useState(true);
   const [otherOpen, setOtherOpen] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false); // controla o menu do botão +
+  const [menuOpen, setMenuOpen] = useState(false);
   const [hoveredDate, setHoveredDate] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Estados de dados
   const [userType, setUserType] = useState<"user" | "company" | null>(null);
   const [userData, setUserData] = useState<UserDashboardPayload | null>(null);
-  const [companyData, setCompanyData] = useState<CompanyDashboardPayload | null>(null);
+  const [companyData, setCompanyData] =
+    useState<CompanyDashboardPayload | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
 
-  // Datas dinâmicas (próximos 7 dias a partir de hoje)
-  const [datesList, setDatesList] = useState<{ label: string; dateString: string }[]>([]);
+  // Datas dinâmicas
+  const [datesList, setDatesList] = useState<
+    { label: string; dateString: string }[]
+  >([]);
   const [selectedDateStr, setSelectedDateStr] = useState<string>("");
 
   // Modal de informações da conta
@@ -84,25 +87,36 @@ export default function Dashboard() {
   // Modal de criação de tarefa
   const [taskModalVisible, setTaskModalVisible] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
-  const [taskPriority, setTaskPriority] = useState(2); // 2 = Normal por padrão
-  const [taskDueDate, setTaskDueDate] = useState<"hoje" | "amanha" | "semana">("hoje");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [taskPriority, setTaskPriority] = useState(2);
+  const [taskDueDate, setTaskDueDate] =
+    useState<"hoje" | "amanha" | "semana">("hoje");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(
+    null
+  );
 
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // Gera os próximos 7 dias dinamicamente no fuso local (sem conversão UTC que altera o dia)
+  // Gera os próximos 7 dias
   useEffect(() => {
     const list: { label: string; dateString: string }[] = [];
+
     for (let i = 0; i < 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
+
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
+
       const dateString = `${year}-${month}-${day}`;
-      list.push({ label: `${day}/${month}`, dateString });
+
+      list.push({
+        label: `${day}/${month}`,
+        dateString,
+      });
     }
+
     setDatesList(list);
     setSelectedDateStr(list[0]?.dateString ?? "");
   }, []);
@@ -111,6 +125,7 @@ export default function Dashboard() {
 
   const fetchDashboard = useCallback(async () => {
     const token = await getToken();
+
     if (!token) {
       router.replace("/");
       return;
@@ -119,63 +134,75 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      // Usa o tipo de sessão salvo no login para decidir o fluxo correto
       const { getUserType } = await import("../services/auth");
       const sessionType = await getUserType();
 
       if (sessionType === "company") {
-        // ── Administrador/Empresa ──────────────────────────────────────
         setUserType("company");
 
         const companyRes = await authenticatedFetch("/dashboard/company");
-        if (companyRes.status === 401) { router.replace("/"); return; }
+
+        if (companyRes.status === 401) {
+          router.replace("/");
+          return;
+        }
+
         if (companyRes.ok) {
           const body = await companyRes.json();
           setCompanyData(body);
         }
 
-        // Também carrega as informações do usuário logado (o administrador)
         const userRes = await authenticatedFetch("/dashboard/user");
+
         if (userRes.ok) {
           const body = await userRes.json();
           setUserData(body.data);
           setUserPhoto(body.data?.foto || null);
         }
-     
+
         const empRes = await authenticatedFetch("/users");
+
         if (empRes.ok) {
           const empBody = await empRes.json();
           setEmployees(empBody.data ?? []);
         }
-        
-        const companyTasksRes = await authenticatedFetch("/tasks/company-tasks");
+
+        const companyTasksRes = await authenticatedFetch(
+          "/tasks/company-tasks"
+        );
+
         if (companyTasksRes.ok) {
           const companyTasksBody = await companyTasksRes.json();
           setTasks(companyTasksBody.data ?? []);
         } else {
           const myTasksRes = await authenticatedFetch("/tasks/my-tasks");
+
           if (myTasksRes.ok) {
             const myTasksBody = await myTasksRes.json();
             setTasks(myTasksBody.data ?? []);
           }
         }
       } else {
-        // ── Funcionário ───────────────────────────────────────────────
         setUserType("user");
 
         const userRes = await authenticatedFetch("/dashboard/user");
-        if (userRes.status === 401) { router.replace("/"); return; }
+
+        if (userRes.status === 401) {
+          router.replace("/");
+          return;
+        }
+
         if (userRes.ok) {
           const body = await userRes.json();
           setUserData(body.data);
           setUserPhoto(body.data?.foto || null);
         } else {
-          // fallback: se o usuário não for reconhecido, redireciona para login
           router.replace("/");
           return;
         }
 
         const tasksRes = await authenticatedFetch("/tasks/my-tasks");
+
         if (tasksRes.ok) {
           const tasksBody = await tasksRes.json();
           setTasks(tasksBody.data ?? []);
@@ -183,7 +210,10 @@ export default function Dashboard() {
       }
     } catch (e) {
       console.error(e);
-      Alert.alert("Erro", "Não foi possível carregar o dashboard. Verifique sua conexão.");
+      Alert.alert(
+        "Erro",
+        "Não foi possível carregar o dashboard. Verifique sua conexão."
+      );
       router.replace("/");
     } finally {
       setLoading(false);
@@ -193,12 +223,15 @@ export default function Dashboard() {
   useFocusEffect(
     useCallback(() => {
       fetchDashboard();
-    }, [fetchDashboard]),
+    }, [fetchDashboard])
   );
 
   // ── Ações de Tarefa ────────────────────────────────────────────────────────
 
-  const handleUpdateTaskStatus = async (taskId: number, newStatus: number) => {
+  const handleUpdateTaskStatus = async (
+    taskId: number,
+    newStatus: number
+  ) => {
     try {
       const response = await authenticatedFetch(`/tasks/${taskId}/status`, {
         method: "PATCH",
@@ -206,11 +239,24 @@ export default function Dashboard() {
       });
 
       if (response.ok) {
-        const label = newStatus === 1 ? "Concluída!" : newStatus === 2 ? "Em Andamento!" : "Pendente!";
-        Alert.alert("Sucesso 🎉", `Status da tarefa alterado para ${label}`);
+        const label =
+          newStatus === 1
+            ? "Concluída!"
+            : newStatus === 2
+            ? "Em Andamento!"
+            : "Pendente!";
+
+        Alert.alert(
+          "Sucesso 🎉",
+          `Status da tarefa alterado para ${label}`
+        );
+
         fetchDashboard();
       } else {
-        Alert.alert("Erro", "Não foi possível atualizar o status da tarefa.");
+        Alert.alert(
+          "Erro",
+          "Não foi possível atualizar o status da tarefa."
+        );
       }
     } catch (e) {
       console.error(e);
@@ -225,9 +271,14 @@ export default function Dashboard() {
   };
 
   const handlePickPhoto = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
     if (!permission.granted) {
-      Alert.alert("Permissão negada", "Precisamos de acesso à sua galeria para trocar a foto.");
+      Alert.alert(
+        "Permissão negada",
+        "Precisamos de acesso à sua galeria para trocar a foto."
+      );
       return;
     }
 
@@ -243,25 +294,29 @@ export default function Dashboard() {
 
     const asset = result.assets[0];
     const base64 = asset.base64;
+
     if (!base64) return;
 
-    const mimeType = asset.mimeType || 'image/jpeg';
+    const mimeType = asset.mimeType || "image/jpeg";
     const photoDataUri = `data:${mimeType};base64,${base64}`;
 
-    // Mostra a foto imediatamente
     setUserPhoto(photoDataUri);
 
-    // Envia pro backend
     setUploadingPhoto(true);
+
     try {
       const token = await getToken();
+
       const response = await fetch(`${API_URL}/users/${userData?.id}`, {
-        method: 'PATCH',
+        method: "PATCH",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ foto: photoDataUri, foto_func: photoDataUri }),
+        body: JSON.stringify({
+          foto: photoDataUri,
+          foto_func: photoDataUri,
+        }),
       });
 
       if (response.ok) {
@@ -290,12 +345,17 @@ export default function Dashboard() {
     }
 
     const dueDate = new Date();
-    if (taskDueDate === "amanha") dueDate.setDate(dueDate.getDate() + 1);
-    else if (taskDueDate === "semana") dueDate.setDate(dueDate.getDate() + 7);
+
+    if (taskDueDate === "amanha") {
+      dueDate.setDate(dueDate.getDate() + 1);
+    } else if (taskDueDate === "semana") {
+      dueDate.setDate(dueDate.getDate() + 7);
+    }
 
     const year = dueDate.getFullYear();
     const month = String(dueDate.getMonth() + 1).padStart(2, "0");
     const day = String(dueDate.getDate()).padStart(2, "0");
+
     const dateStringLocal = `${year}-${month}-${day}`;
 
     try {
@@ -304,6 +364,7 @@ export default function Dashboard() {
         validade_tarefa: dateStringLocal,
         prioridade_tarefa: Number(taskPriority),
       };
+
       if (userType === "company" && selectedEmployeeId) {
         body.fk_id_func = Number(selectedEmployeeId);
       } else if (userData?.id) {
@@ -332,14 +393,18 @@ export default function Dashboard() {
     }
   };
 
-  // ── Filtragem de tarefas por data e prioridade ─────────────────────────────
+  // ── Filtragem de tarefas ───────────────────────────────────────────────────
 
   const activeTasks = tasks.filter((t) => {
-    if (t.status === 1) return false; // descarta concluídas das ativas
+    if (t.status === 1) return false;
+
     if (!t.dueDate) return true;
-    const taskDateOnly = typeof t.dueDate === 'string' && t.dueDate.includes('T')
-      ? t.dueDate.split('T')[0]
-      : String(t.dueDate);
+
+    const taskDateOnly =
+      typeof t.dueDate === "string" && t.dueDate.includes("T")
+        ? t.dueDate.split("T")[0]
+        : String(t.dueDate);
+
     return taskDateOnly === selectedDateStr || !selectedDateStr;
   });
 
@@ -350,61 +415,95 @@ export default function Dashboard() {
 
   const renderTask = (task: TaskItem) => {
     const isCompany = userType === "company";
+
     return (
       <View key={task.id} style={styles.taskItem}>
-        {/* Indicador de status */}
-        <View style={[
-          styles.statusDot,
-          task.status === 2 && { backgroundColor: "#D97706" },
-          task.status === 3 && { backgroundColor: "#94A3B8" },
-        ]} />
+        <View
+          style={[
+            styles.statusDot,
+            task.status === 2 && { backgroundColor: "#D97706" },
+            task.status === 3 && { backgroundColor: "#94A3B8" },
+          ]}
+        />
 
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{task.name.charAt(0).toUpperCase()}</Text>
+          <Text style={styles.avatarText}>
+            {task.name.charAt(0).toUpperCase()}
+          </Text>
         </View>
 
         <View style={{ flex: 1 }}>
           <Text style={styles.taskName}>{task.name}</Text>
-          <Text style={{ fontSize: 10, color: task.status === 2 ? "#D97706" : "#94A3B8", marginTop: 1 }}>
-            {task.status === 3 ? "Pendente" : task.status === 2 ? "Em andamento" : "Concluída"}
+
+          <Text
+            style={{
+              fontSize: 10,
+              color: task.status === 2 ? "#D97706" : "#94A3B8",
+              marginTop: 1,
+            }}
+          >
+            {task.status === 3
+              ? "Pendente"
+              : task.status === 2
+              ? "Em andamento"
+              : "Concluída"}
           </Text>
         </View>
 
         <Text style={styles.taskPoints}>{task.points}+</Text>
 
-        {/* Botões de Alteração de Status */}
-        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
-          {/* Em Andamento (Status 2) — exibe se pendente (3) */}
+        <View
+          style={{
+            flexDirection: "row",
+            gap: 6,
+            alignItems: "center",
+          }}
+        >
           {task.status === 3 && (
             <TouchableOpacity
-              style={[styles.checkButton, { backgroundColor: "#D97706" }]}
+              style={[
+                styles.checkButton,
+                { backgroundColor: "#D97706" },
+              ]}
               activeOpacity={0.8}
               onPress={() => handleUpdateTaskStatus(task.id, 2)}
             >
-              <Ionicons name="time-outline" size={16} color="#FFFFFF" />
+              <Ionicons
+                name="time-outline"
+                size={16}
+                color="#FFFFFF"
+              />
             </TouchableOpacity>
           )}
 
-          {/* Concluída (Status 1) — disponível para funcionário em qualquer status,
-              para empresa sempre disponível */}
           {(task.status === 3 || task.status === 2) && (
             <TouchableOpacity
               style={styles.checkButton}
               activeOpacity={0.8}
               onPress={() => handleUpdateTaskStatus(task.id, 1)}
             >
-              <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+              <Ionicons
+                name="checkmark"
+                size={18}
+                color="#FFFFFF"
+              />
             </TouchableOpacity>
           )}
 
-          {/* Empresa pode resetar para Pendente se estava Em Andamento */}
           {isCompany && task.status === 2 && (
             <TouchableOpacity
-              style={[styles.checkButton, { backgroundColor: "#94A3B8" }]}
+              style={[
+                styles.checkButton,
+                { backgroundColor: "#94A3B8" },
+              ]}
               activeOpacity={0.8}
               onPress={() => handleUpdateTaskStatus(task.id, 3)}
             >
-              <Ionicons name="refresh-outline" size={16} color="#FFFFFF" />
+              <Ionicons
+                name="refresh-outline"
+                size={16}
+                color="#FFFFFF"
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -416,31 +515,41 @@ export default function Dashboard() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* UI: topo com logo e ícone de conta */}
       <View style={styles.header}>
         <View style={styles.logoBox}>
-          <Image source={cooperaLogo} style={styles.logo} resizeMode="contain" />
+          <Image
+            source={cooperaLogo}
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
 
         <TouchableOpacity
           style={styles.headerAccountButton}
           activeOpacity={0.8}
           onPress={() => setAccountModalVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Informações da conta"
         >
           {userPhoto || userData?.foto ? (
             <Image
-              source={{ uri: (userPhoto || userData?.foto) ?? undefined }}
-              style={{ width: 32, height: 32, borderRadius: 16 }}
+              source={{
+                uri: (userPhoto || userData?.foto) ?? undefined,
+              }}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+              }}
             />
           ) : (
-            <Ionicons name="person" size={26} color="#94A3B8" />
+            <Ionicons
+              name="person"
+              size={26}
+              color="#94A3B8"
+            />
           )}
         </TouchableOpacity>
       </View>
 
-      {/* UI: seletor horizontal de datas dinâmico */}
       <ScrollView
         style={styles.dateScroll}
         horizontal
@@ -448,18 +557,22 @@ export default function Dashboard() {
         contentContainerStyle={styles.dateContainer}
       >
         {datesList.map((item, index) => {
-          const isSelected = item.dateString === selectedDateStr;
+          const isSelected =
+            item.dateString === selectedDateStr;
 
           return (
             <Pressable
               key={item.dateString}
               onHoverIn={() => setHoveredDate(index)}
               onHoverOut={() => setHoveredDate(null)}
-              onPress={() => setSelectedDateStr(item.dateString)}
+              onPress={() =>
+                setSelectedDateStr(item.dateString)
+              }
               style={[
                 styles.dateButton,
                 isSelected && styles.dateButtonSelected,
-                hoveredDate === index && styles.dateButtonHover,
+                hoveredDate === index &&
+                  styles.dateButtonHover,
               ]}
             >
               <Text
@@ -475,7 +588,6 @@ export default function Dashboard() {
         })}
       </ScrollView>
 
-      {/* UI: cards de tarefas */}
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -488,10 +600,16 @@ export default function Dashboard() {
             onPress={() => setOpen(!open)}
             activeOpacity={0.8}
           >
-            <Text style={styles.cardTitle}>Tarefas Urgentes</Text>
+            <Text style={styles.cardTitle}>
+              Tarefas Urgentes
+            </Text>
 
             <Ionicons
-              name={open ? "chevron-up" : "chevron-down"}
+              name={
+                open
+                  ? "chevron-up"
+                  : "chevron-down"
+              }
               size={24}
               color="#285A71"
             />
@@ -501,8 +619,13 @@ export default function Dashboard() {
             <View style={styles.taskList}>
               {loading && tasks.length === 0 ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color="#285A71" />
-                  <Text style={styles.loadingLabel}>Carregando dados</Text>
+                  <ActivityIndicator
+                    size="small"
+                    color="#285A71"
+                  />
+                  <Text style={styles.loadingLabel}>
+                    Carregando dados
+                  </Text>
                 </View>
               ) : urgentTasks.length === 0 ? (
                 <Text style={styles.emptyText}>
@@ -516,16 +639,29 @@ export default function Dashboard() {
         </View>
 
         {/* Card Outras Tarefas */}
-        <View style={[styles.card, styles.cardSpacing]}>
+        <View
+          style={[
+            styles.card,
+            styles.cardSpacing,
+          ]}
+        >
           <TouchableOpacity
             style={styles.cardHeader}
-            onPress={() => setOtherOpen(!otherOpen)}
+            onPress={() =>
+              setOtherOpen(!otherOpen)
+            }
             activeOpacity={0.8}
           >
-            <Text style={styles.cardTitle}>Outras Tarefas</Text>
+            <Text style={styles.cardTitle}>
+              Outras Tarefas
+            </Text>
 
             <Ionicons
-              name={otherOpen ? "chevron-up" : "chevron-down"}
+              name={
+                otherOpen
+                  ? "chevron-up"
+                  : "chevron-down"
+              }
               size={24}
               color="#285A71"
             />
@@ -544,10 +680,21 @@ export default function Dashboard() {
           )}
         </View>
 
+        {/* NOVO CARD: Tarefas Pendentes */}
+        <View
+          style={[
+            styles.card,
+            styles.cardSpacing,
+          ]}
+        >
+          <Text style={styles.cardTitle}>
+            Tarefas Pendentes
+          </Text>
+        </View>
+
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* UI: menu acima do botão + */}
       {menuOpen && (
         <View style={styles.dropupMenu}>
           <TouchableOpacity
@@ -558,339 +705,839 @@ export default function Dashboard() {
               setTaskModalVisible(true);
             }}
           >
-            <Ionicons name="star" size={16} color="#285A71" />
-            <Text style={styles.menuText}>Tarefa</Text>
+            <Ionicons
+              name="star"
+              size={16}
+              color="#285A71"
+            />
+            <Text style={styles.menuText}>
+              Tarefa
+            </Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* UI: botão flutuante + / X */}
       <TouchableOpacity
-        style={[styles.floatingButton, menuOpen && styles.floatingButtonActive]}
+        style={[
+          styles.floatingButton,
+          menuOpen &&
+            styles.floatingButtonActive,
+        ]}
         activeOpacity={0.85}
-        onPress={() => setMenuOpen(!menuOpen)}
+        onPress={() =>
+          setMenuOpen(!menuOpen)
+        }
       >
         <Ionicons
-          name={menuOpen ? "close" : "add"}
+          name={
+            menuOpen
+              ? "close"
+              : "add"
+          }
           size={34}
           color="#FFFFFF"
         />
       </TouchableOpacity>
 
-      {/* UI: barra de navegação inferior */}
       <View style={styles.bottomNavigation}>
-        <TouchableOpacity style={styles.navButton} activeOpacity={0.8}>
-          <Ionicons name="home" size={26} color="#285A71" />
-          <Text style={styles.navLabel}>central</Text>
+        <TouchableOpacity
+          style={styles.navButton}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="home"
+            size={26}
+            color="#285A71"
+          />
+          <Text style={styles.navLabel}>
+            central
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.navButton}
           activeOpacity={0.8}
-          onPress={() => router.push("/chat")}
+          onPress={() =>
+            router.push("/chat")
+          }
         >
-          <Ionicons name="chatbubble-ellipses" size={26} color="#94A3B8" />
-          <Text style={styles.navLabel}>chats</Text>
+          <Ionicons
+            name="chatbubble-ellipses"
+            size={26}
+            color="#94A3B8"
+          />
+          <Text style={styles.navLabel}>
+            chats
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── Modal: Informações da Conta ───────────────────────────────────────── */}
+      {/* Modal Conta */}
       <Modal
         animationType="slide"
         transparent={true}
         visible={accountModalVisible}
-        onRequestClose={() => setAccountModalVisible(false)}
+        onRequestClose={() =>
+          setAccountModalVisible(false)
+        }
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => setAccountModalVisible(false)}
+          onPress={() =>
+            setAccountModalVisible(false)
+          }
         >
-          <Pressable style={styles.accountModal} onPress={() => {}}>
-            {/* Cabeçalho */}
+          <Pressable
+            style={styles.accountModal}
+            onPress={() => {}}
+          >
             <View style={styles.accountModalHeader}>
-              <Text style={styles.accountModalTitle}>Minha Conta</Text>
-              <TouchableOpacity onPress={() => setAccountModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#285A71" />
+              <Text
+                style={styles.accountModalTitle}
+              >
+                Minha Conta
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setAccountModalVisible(false)
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#285A71"
+                />
               </TouchableOpacity>
             </View>
 
-            {/* Avatar com foto */}
-            <TouchableOpacity style={styles.accountAvatar} onPress={handlePickPhoto} disabled={uploadingPhoto}>
-              {userPhoto || userData?.foto ? (
+            <TouchableOpacity
+              style={styles.accountAvatar}
+              onPress={handlePickPhoto}
+              disabled={uploadingPhoto}
+            >
+              {userPhoto ||
+              userData?.foto ? (
                 <Image
-                  source={{ uri: (userPhoto || userData?.foto) ?? undefined }}
-                  style={{ width: 72, height: 72, borderRadius: 36 }}
+                  source={{
+                    uri:
+                      (userPhoto ||
+                        userData?.foto) ??
+                      undefined,
+                  }}
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 36,
+                  }}
                 />
               ) : (
-                <Ionicons name="person" size={40} color="#FFFFFF" />
+                <Ionicons
+                  name="person"
+                  size={40}
+                  color="#FFFFFF"
+                />
               )}
             </TouchableOpacity>
+
             {uploadingPhoto && (
-              <Text style={{ textAlign: "center", color: "#285A71", fontSize: 12, marginBottom: 8 }}>
+              <Text
+                style={{
+                  textAlign: "center",
+                  color: "#285A71",
+                  fontSize: 12,
+                  marginBottom: 8,
+                }}
+              >
                 Enviando foto...
               </Text>
             )}
 
-            {/* Dados do usuário */}
-            {userType === "user" && userData && (
-              <View style={styles.accountInfo}>
-                <Text style={styles.accountName}>{userData.nome}</Text>
-                <Text style={styles.accountEmail}>{userData.email}</Text>
-
-                <View style={styles.accountStatRow}>
-                  <View style={styles.accountStat}>
-                    <Ionicons name="trophy" size={22} color="#D97706" />
-                    <Text style={styles.accountStatValue}>{userData.pontos}</Text>
-                    <Text style={styles.accountStatLabel}>Pontos</Text>
-                  </View>
-
-                  <View style={styles.accountStat}>
-                    <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
-                    <Text style={styles.accountStatValue}>{userData.tarefasConcluidas}</Text>
-                    <Text style={styles.accountStatLabel}>Concluídas</Text>
-                  </View>
-
-                  <View style={styles.accountStat}>
-                    <Ionicons name="time" size={22} color="#285A71" />
-                    <Text style={styles.accountStatValue}>{userData.tarefasPendentes}</Text>
-                    <Text style={styles.accountStatLabel}>Pendentes</Text>
-                  </View>
-                </View>
-
-                {/* Botão Trocar Foto */}
-                <TouchableOpacity
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    backgroundColor: "#ECEFD9",
-                    paddingVertical: 12,
-                    paddingHorizontal: 24,
-                    borderRadius: 14,
-                    marginTop: 16,
-                    borderWidth: 0.5,
-                    borderColor: "#285A71",
-                  }}
-                  onPress={handlePickPhoto}
-                  disabled={uploadingPhoto}
+            {userType === "user" &&
+              userData && (
+                <View
+                  style={styles.accountInfo}
                 >
-                  <Ionicons name="camera-outline" size={18} color="#285A71" />
-                  <Text style={{ color: "#285A71", fontSize: 14, fontWeight: "700" }}>
-                    Trocar Foto
+                  <Text
+                    style={styles.accountName}
+                  >
+                    {userData.nome}
                   </Text>
-                </TouchableOpacity>
-              </View>
-            )}
 
-            {userType === "company" && companyData && (
-              <View style={styles.accountInfo}>
-                <Text style={styles.accountName}>{userData?.nome || "Painel Corporativo"}</Text>
-                <Text style={styles.accountEmail}>{userData?.email || "Administrador"}</Text>
+                  <Text
+                    style={styles.accountEmail}
+                  >
+                    {userData.email}
+                  </Text>
 
-                <View style={styles.accountStatRow}>
-                  <View style={styles.accountStat}>
-                    <Ionicons name="people" size={22} color="#285A71" />
-                    <Text style={styles.accountStatValue}>{companyData.totalFuncionarios}</Text>
-                    <Text style={styles.accountStatLabel}>Colaboradores</Text>
+                  <View
+                    style={
+                      styles.accountStatRow
+                    }
+                  >
+                    <View
+                      style={
+                        styles.accountStat
+                      }
+                    >
+                      <Ionicons
+                        name="trophy"
+                        size={22}
+                        color="#D97706"
+                      />
+
+                      <Text
+                        style={
+                          styles.accountStatValue
+                        }
+                      >
+                        {userData.pontos}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.accountStatLabel
+                        }
+                      >
+                        Pontos
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.accountStat
+                      }
+                    >
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={22}
+                        color="#16A34A"
+                      />
+
+                      <Text
+                        style={
+                          styles.accountStatValue
+                        }
+                      >
+                        {
+                          userData.tarefasConcluidas
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.accountStatLabel
+                        }
+                      >
+                        Concluídas
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.accountStat
+                      }
+                    >
+                      <Ionicons
+                        name="time"
+                        size={22}
+                        color="#285A71"
+                      />
+
+                      <Text
+                        style={
+                          styles.accountStatValue
+                        }
+                      >
+                        {
+                          userData.tarefasPendentes
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.accountStatLabel
+                        }
+                      >
+                        Pendentes
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.accountStat}>
-                    <Ionicons name="checkmark-circle" size={22} color="#16A34A" />
-                    <Text style={styles.accountStatValue}>{companyData.tarefasConcluidas}</Text>
-                    <Text style={styles.accountStatLabel}>Concluídas</Text>
-                  </View>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection:
+                        "row",
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "center",
+                      gap: 8,
+                      backgroundColor:
+                        "#ECEFD9",
+                      paddingVertical: 12,
+                      paddingHorizontal: 24,
+                      borderRadius: 14,
+                      marginTop: 16,
+                      borderWidth: 0.5,
+                      borderColor:
+                        "#285A71",
+                    }}
+                    onPress={
+                      handlePickPhoto
+                    }
+                    disabled={
+                      uploadingPhoto
+                    }
+                  >
+                    <Ionicons
+                      name="camera-outline"
+                      size={18}
+                      color="#285A71"
+                    />
 
-                  <View style={styles.accountStat}>
-                    <Ionicons name="time" size={22} color="#D97706" />
-                    <Text style={styles.accountStatValue}>{companyData.tarefasPendentes}</Text>
-                    <Text style={styles.accountStatLabel}>Pendentes</Text>
-                  </View>
+                    <Text
+                      style={{
+                        color: "#285A71",
+                        fontSize: 14,
+                        fontWeight:
+                          "700",
+                      }}
+                    >
+                      Trocar Foto
+                    </Text>
+                  </TouchableOpacity>
                 </View>
+              )}
 
-                {/* Botão Trocar Foto para Admin */}
-                <TouchableOpacity
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    backgroundColor: "#ECEFD9",
-                    paddingVertical: 12,
-                    paddingHorizontal: 24,
-                    borderRadius: 14,
-                    marginTop: 16,
-                    borderWidth: 0.5,
-                    borderColor: "#285A71",
-                  }}
-                  onPress={handlePickPhoto}
-                  disabled={uploadingPhoto}
+            {userType === "company" &&
+              companyData && (
+                <View
+                  style={styles.accountInfo}
                 >
-                  <Ionicons name="camera-outline" size={18} color="#285A71" />
-                  <Text style={{ color: "#285A71", fontSize: 14, fontWeight: "700" }}>
-                    Trocar Foto
+                  <Text
+                    style={styles.accountName}
+                  >
+                    {userData?.nome ||
+                      "Painel Corporativo"}
                   </Text>
-                </TouchableOpacity>
-              </View>
-            )}
 
-            {/* Botão de navegação para o perfil — exibido conforme o tipo de sessão */}
-            <View style={{ gap: 8, marginTop: 16, marginBottom: 8, width: "100%" }}>
-              {/* Colaborador: ver apenas perfil de colaborador */}
+                  <Text
+                    style={styles.accountEmail}
+                  >
+                    {userData?.email ||
+                      "Administrador"}
+                  </Text>
+
+                  <View
+                    style={
+                      styles.accountStatRow
+                    }
+                  >
+                    <View
+                      style={
+                        styles.accountStat
+                      }
+                    >
+                      <Ionicons
+                        name="people"
+                        size={22}
+                        color="#285A71"
+                      />
+
+                      <Text
+                        style={
+                          styles.accountStatValue
+                        }
+                      >
+                        {
+                          companyData.totalFuncionarios
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.accountStatLabel
+                        }
+                      >
+                        Colaboradores
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.accountStat
+                      }
+                    >
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={22}
+                        color="#16A34A"
+                      />
+
+                      <Text
+                        style={
+                          styles.accountStatValue
+                        }
+                      >
+                        {
+                          companyData.tarefasConcluidas
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.accountStatLabel
+                        }
+                      >
+                        Concluídas
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.accountStat
+                      }
+                    >
+                      <Ionicons
+                        name="time"
+                        size={22}
+                        color="#D97706"
+                      />
+
+                      <Text
+                        style={
+                          styles.accountStatValue
+                        }
+                      >
+                        {
+                          companyData.tarefasPendentes
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.accountStatLabel
+                        }
+                      >
+                        Pendentes
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={{
+                      flexDirection:
+                        "row",
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "center",
+                      gap: 8,
+                      backgroundColor:
+                        "#ECEFD9",
+                      paddingVertical: 12,
+                      paddingHorizontal: 24,
+                      borderRadius: 14,
+                      marginTop: 16,
+                      borderWidth: 0.5,
+                      borderColor:
+                        "#285A71",
+                    }}
+                    onPress={
+                      handlePickPhoto
+                    }
+                    disabled={
+                      uploadingPhoto
+                    }
+                  >
+                    <Ionicons
+                      name="camera-outline"
+                      size={18}
+                      color="#285A71"
+                    />
+
+                    <Text
+                      style={{
+                        color: "#285A71",
+                        fontSize: 14,
+                        fontWeight:
+                          "700",
+                      }}
+                    >
+                      Trocar Foto
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+            <View
+              style={{
+                gap: 8,
+                marginTop: 16,
+                marginBottom: 8,
+                width: "100%",
+              }}
+            >
               {userType === "user" && (
                 <TouchableOpacity
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    flexDirection:
+                      "row",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
                     gap: 8,
-                    backgroundColor: "#285A71",
+                    backgroundColor:
+                      "#285A71",
                     paddingVertical: 12,
                     paddingHorizontal: 18,
                     borderRadius: 12,
                   }}
                   onPress={() => {
-                    setAccountModalVisible(false);
-                    router.push("/perfilFunc");
+                    setAccountModalVisible(
+                      false
+                    );
+                    router.push(
+                      "/perfilFunc"
+                    );
                   }}
                 >
-                  <Ionicons name="person-outline" size={18} color="#FFFFFF" />
-                  <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700" }}>
+                  <Ionicons
+                    name="person-outline"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 13,
+                      fontWeight:
+                        "700",
+                    }}
+                  >
                     Perfil do Colaborador
                   </Text>
                 </TouchableOpacity>
               )}
 
-              {/* Administrador: ver perfil administrativo apenas */}
               {userType === "company" && (
                 <TouchableOpacity
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    flexDirection:
+                      "row",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
                     gap: 8,
-                    backgroundColor: "#285A71",
+                    backgroundColor:
+                      "#285A71",
                     paddingVertical: 12,
                     paddingHorizontal: 18,
                     borderRadius: 12,
                   }}
                   onPress={() => {
-                    setAccountModalVisible(false);
-                    router.push("/perfilAdm");
+                    setAccountModalVisible(
+                      false
+                    );
+                    router.push(
+                      "/perfilAdm"
+                    );
                   }}
                 >
-                  <Ionicons name="shield-checkmark-outline" size={18} color="#FFFFFF" />
-                  <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700" }}>
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 13,
+                      fontWeight:
+                        "700",
+                    }}
+                  >
                     Perfil Administrativo
                   </Text>
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Botão de logout */}
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.logoutButtonText}>Sair da Conta</Text>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+            >
+              <Ionicons
+                name="log-out-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+
+              <Text
+                style={
+                  styles.logoutButtonText
+                }
+              >
+                Sair da Conta
+              </Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* ── Modal: Criar Tarefa ───────────────────────────────────────────────── */}
+      {/* Modal Criar Tarefa */}
       <Modal
         animationType="slide"
         transparent={true}
         visible={taskModalVisible}
-        onRequestClose={() => setTaskModalVisible(false)}
+        onRequestClose={() =>
+          setTaskModalVisible(false)
+        }
       >
         <View style={styles.modalOverlay}>
           <View style={styles.taskModal}>
-            <View style={styles.accountModalHeader}>
-              <Text style={styles.accountModalTitle}>Nova Tarefa</Text>
-              <TouchableOpacity onPress={() => setTaskModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#285A71" />
+            <View
+              style={
+                styles.accountModalHeader
+              }
+            >
+              <Text
+                style={
+                  styles.accountModalTitle
+                }
+              >
+                Nova Tarefa
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setTaskModalVisible(
+                    false
+                  )
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#285A71"
+                />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>Título / Descrição</Text>
+            <Text
+              style={styles.inputLabel}
+            >
+              Título / Descrição
+            </Text>
+
             <TextInput
               style={styles.textInput}
               placeholder="Ex: Enviar relatório do setor"
               placeholderTextColor="#94A3B8"
               value={taskTitle}
-              onChangeText={setTaskTitle}
+              onChangeText={
+                setTaskTitle
+              }
             />
 
-            <Text style={styles.inputLabel}>Prioridade</Text>
-            <View style={styles.optionRow}>
+            <Text
+              style={styles.inputLabel}
+            >
+              Prioridade
+            </Text>
+
+            <View
+              style={styles.optionRow}
+            >
               <TouchableOpacity
-                style={[styles.optionBtn, taskPriority === 1 && styles.optionBtnUrgent]}
-                onPress={() => setTaskPriority(1)}
+                style={[
+                  styles.optionBtn,
+                  taskPriority === 1 &&
+                    styles.optionBtnUrgent,
+                ]}
+                onPress={() =>
+                  setTaskPriority(1)
+                }
               >
-                <Text style={[styles.optionText, taskPriority === 1 && styles.optionTextActive]}>
+                <Text
+                  style={[
+                    styles.optionText,
+                    taskPriority === 1 &&
+                      styles.optionTextActive,
+                  ]}
+                >
                   Urgente
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.optionBtn, taskPriority === 2 && styles.optionBtnNormal]}
-                onPress={() => setTaskPriority(2)}
+                style={[
+                  styles.optionBtn,
+                  taskPriority === 2 &&
+                    styles.optionBtnNormal,
+                ]}
+                onPress={() =>
+                  setTaskPriority(2)
+                }
               >
-                <Text style={[styles.optionText, taskPriority === 2 && styles.optionTextActive]}>
+                <Text
+                  style={[
+                    styles.optionText,
+                    taskPriority === 2 &&
+                      styles.optionTextActive,
+                  ]}
+                >
                   Normal
                 </Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>Prazo</Text>
-            <View style={styles.optionRow}>
-              {(["hoje", "amanha", "semana"] as const).map((opt) => (
+            <Text
+              style={styles.inputLabel}
+            >
+              Prazo
+            </Text>
+
+            <View
+              style={styles.optionRow}
+            >
+              {(
+                [
+                  "hoje",
+                  "amanha",
+                  "semana",
+                ] as const
+              ).map((opt) => (
                 <TouchableOpacity
                   key={opt}
-                  style={[styles.optionBtn, taskDueDate === opt && styles.optionBtnNormal]}
-                  onPress={() => setTaskDueDate(opt)}
+                  style={[
+                    styles.optionBtn,
+                    taskDueDate ===
+                      opt &&
+                      styles.optionBtnNormal,
+                  ]}
+                  onPress={() =>
+                    setTaskDueDate(opt)
+                  }
                 >
-                  <Text style={[styles.optionText, taskDueDate === opt && styles.optionTextActive]}>
-                    {opt === "hoje" ? "Hoje" : opt === "amanha" ? "Amanhã" : "7 Dias"}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      taskDueDate ===
+                        opt &&
+                        styles.optionTextActive,
+                    ]}
+                  >
+                    {opt === "hoje"
+                      ? "Hoje"
+                      : opt ===
+                        "amanha"
+                      ? "Amanhã"
+                      : "7 Dias"}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Seleção de colaborador (apenas para empresa) */}
             {userType === "company" && (
               <>
-                <Text style={styles.inputLabel}>Atribuir Colaborador</Text>
-                <ScrollView style={styles.employeeList} nestedScrollEnabled>
-                  {employees.map((emp) => {
-                    const sel = selectedEmployeeId === emp.id;
-                    return (
-                      <TouchableOpacity
-                        key={emp.id}
-                        style={[styles.employeeRow, sel && styles.employeeRowActive]}
-                        onPress={() => setSelectedEmployeeId(emp.id)}
-                      >
-                        <Text style={[styles.employeeText, sel && styles.employeeTextActive]}>
-                          {emp.nome}
-                        </Text>
-                        {sel && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-                      </TouchableOpacity>
-                    );
-                  })}
+                <Text
+                  style={
+                    styles.inputLabel
+                  }
+                >
+                  Atribuir Colaborador
+                </Text>
+
+                <ScrollView
+                  style={
+                    styles.employeeList
+                  }
+                  nestedScrollEnabled
+                >
+                  {employees.map(
+                    (emp) => {
+                      const sel =
+                        selectedEmployeeId ===
+                        emp.id;
+
+                      return (
+                        <TouchableOpacity
+                          key={emp.id}
+                          style={[
+                            styles.employeeRow,
+                            sel &&
+                              styles.employeeRowActive,
+                          ]}
+                          onPress={() =>
+                            setSelectedEmployeeId(
+                              emp.id
+                            )
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.employeeText,
+                              sel &&
+                                styles.employeeTextActive,
+                            ]}
+                          >
+                            {emp.nome}
+                          </Text>
+
+                          {sel && (
+                            <Ionicons
+                              name="checkmark"
+                              size={16}
+                              color="#FFFFFF"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    }
+                  )}
                 </ScrollView>
               </>
             )}
 
-            <View style={styles.modalActions}>
+            <View
+              style={styles.modalActions}
+            >
               <TouchableOpacity
                 style={styles.cancelBtn}
-                onPress={() => setTaskModalVisible(false)}
+                onPress={() =>
+                  setTaskModalVisible(
+                    false
+                  )
+                }
               >
-                <Text style={styles.cancelBtnText}>Cancelar</Text>
+                <Text
+                  style={
+                    styles.cancelBtnText
+                  }
+                >
+                  Cancelar
+                </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.saveBtn} onPress={handleCreateTask}>
-                <Text style={styles.saveBtnText}>Criar Tarefa</Text>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={
+                  handleCreateTask
+                }
+              >
+                <Text
+                  style={
+                    styles.saveBtnText
+                  }
+                >
+                  Criar Tarefa
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -967,7 +1614,10 @@ const styles = StyleSheet.create({
     shadowColor: "#285A71",
     shadowOpacity: 0.16,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     elevation: 4,
   },
 
@@ -1000,7 +1650,10 @@ const styles = StyleSheet.create({
     shadowColor: "#285A71",
     shadowOpacity: 0.08,
     shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     elevation: 3,
   },
 
@@ -1123,7 +1776,10 @@ const styles = StyleSheet.create({
     shadowColor: "#285A71",
     shadowOpacity: 0.12,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     elevation: 5,
   },
 
@@ -1147,7 +1803,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 12,
     marginBottom: 10,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
     elevation: 8,
   },
 
@@ -1179,8 +1838,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#285A71",
   },
-
-  // Modais
 
   modalOverlay: {
     flex: 1,
@@ -1278,8 +1935,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
   },
-
-  // Modal de tarefa
 
   taskModal: {
     backgroundColor: "#FEFDF9",
