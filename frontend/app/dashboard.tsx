@@ -141,11 +141,23 @@ export default function Dashboard() {
           setUserData(body.data);
           setUserPhoto(body.data?.foto || null);
         }
-
+     
         const empRes = await authenticatedFetch("/users");
         if (empRes.ok) {
           const empBody = await empRes.json();
           setEmployees(empBody.data ?? []);
+        }
+        
+        const companyTasksRes = await authenticatedFetch("/tasks/company-tasks");
+        if (companyTasksRes.ok) {
+          const companyTasksBody = await companyTasksRes.json();
+          setTasks(companyTasksBody.data ?? []);
+        } else {
+          const myTasksRes = await authenticatedFetch("/tasks/my-tasks");
+          if (myTasksRes.ok) {
+            const myTasksBody = await myTasksRes.json();
+            setTasks(myTasksBody.data ?? []);
+          }
         }
       } else {
         // ── Funcionário ───────────────────────────────────────────────
@@ -288,14 +300,14 @@ export default function Dashboard() {
 
     try {
       const body: any = {
-        tipo_tarefa: taskTitle,
+        tipo_tarefa: taskTitle.trim(),
         validade_tarefa: dateStringLocal,
-        prioridade_tarefa: taskPriority,
+        prioridade_tarefa: Number(taskPriority),
       };
-      if (userType === "company") {
-        body.fk_id_func = selectedEmployeeId;
+      if (userType === "company" && selectedEmployeeId) {
+        body.fk_id_func = Number(selectedEmployeeId);
       } else if (userData?.id) {
-        body.fk_id_func = userData.id;
+        body.fk_id_func = Number(userData.id);
       }
 
       const response = await authenticatedFetch("/tasks", {
@@ -323,12 +335,12 @@ export default function Dashboard() {
   // ── Filtragem de tarefas por data e prioridade ─────────────────────────────
 
   const activeTasks = tasks.filter((t) => {
-    if (!t.dueDate) return false;
-    // dueDate já vem como 'YYYY-MM-DD' do backend corrigido — compara direto
+    if (t.status === 1) return false; // descarta concluídas das ativas
+    if (!t.dueDate) return true;
     const taskDateOnly = typeof t.dueDate === 'string' && t.dueDate.includes('T')
       ? t.dueDate.split('T')[0]
       : String(t.dueDate);
-    return taskDateOnly === selectedDateStr && t.status !== 1;
+    return taskDateOnly === selectedDateStr || !selectedDateStr;
   });
 
   const urgentTasks = activeTasks.filter((t) => t.priority === 1);

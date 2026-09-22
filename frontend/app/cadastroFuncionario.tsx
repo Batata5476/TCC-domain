@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { authenticatedFetch } from "../services/api";
+import FeedbackModal from "../components/common/FeedbackModal";
 
 export default function CadastroFuncionario() {
   const router = useRouter();
@@ -24,20 +25,33 @@ export default function CadastroFuncionario() {
   const [roleName, setRoleName] = useState("Funcionário"); // 'Funcionário' ou 'Administrador'
   const [loading, setLoading] = useState(false);
 
-  // Exibição pós-cadastro
-  const [createdCredentials, setCreatedCredentials] = useState<{
-    code: string;
-    token: string;
-  } | null>(null);
-
+  // Estado do FeedbackModal
+  const [feedback, setFeedback] = useState<{
+    visible: boolean;
+    type: "success" | "error" | "info";
+    title: string;
+    message: string;
+    details?: string;
+  }>({
+    visible: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
+  
+  // Se toods os campos tiveram preenchidos, manda uma modal true 
   const handleRegister = async () => {
     if (!nome.trim() || !cpf.trim() || !email.trim() || !cargo.trim() || !setorId.trim()) {
-      Alert.alert("Erro", "Por favor, preencha todos os campos obrigatórios.");
+      setFeedback({
+        visible: true,
+        type: "error",
+        title: "Campos Obrigatórios",
+        message: "Por favor, preencha todos os campos obrigatórios (*).",
+      });
       return;
     }
 
     setLoading(true);
-    setCreatedCredentials(null);
 
     try {
       const response = await authenticatedFetch("/users", {
@@ -49,18 +63,26 @@ export default function CadastroFuncionario() {
           cargo: cargo.trim(),
           setor_id: Number(setorId),
           role_name: roleName,
-          permissions: [], // pode ser customizado depois
+          permissions: [],
         }),
       });
 
       const body = await response.json();
 
       if (response.ok) {
-        Alert.alert("Sucesso 🎉", "Funcionário pré-cadastrado com sucesso!");
-        // Em ambiente de desenvolvimento/teste, o backend retorna as credenciais brutas em _dev_
-        if (body._dev_) {
-          setCreatedCredentials(body._dev_);
+        let codeDetails = undefined;
+        if (body._dev_?.code) {
+          codeDetails = `Código de Ativação: ${body._dev_.code}`;
         }
+
+        setFeedback({
+          visible: true,
+          type: "success",
+          title: "Cadastro Concluído! ",
+          message: `O colaborador "${nome.trim()}" foi registrado com sucesso.`,
+          details: codeDetails,
+        });
+
         // Limpar formulário
         setNome("");
         setCpf("");
@@ -68,11 +90,23 @@ export default function CadastroFuncionario() {
         setCargo("");
         setSetorId("");
       } else {
-        Alert.alert("Erro", body.message || "Falha ao cadastrar funcionário.");
+        setFeedback({
+          visible: true,
+          type: "error",
+          title: "Falha no Cadastro",
+          message: body.message || "Não foi possível cadastrar o funcionário.",
+        });
       }
-    } catch (error) {
+    }
+    // Erro de conexão com o backend 
+    catch (error) {
       console.error(error);
-      Alert.alert("Erro", "Não foi possível conectar ao servidor.");
+      setFeedback({
+        visible: true,
+        type: "error",
+        title: "Erro de Conexão",
+        message: "Não foi possível conectar ao servidor backend.",
+      });
     } finally {
       setLoading(false);
     }
@@ -169,37 +203,22 @@ export default function CadastroFuncionario() {
         </TouchableOpacity>
       </View>
 
-      {/* Credenciais Geradas para Teste Fácil */}
-      {createdCredentials && (
-        <View style={styles.credentialsCard}>
-          <Text style={styles.credentialsTitle}>🔑 Credenciais de Primeiro Acesso (Ambiente de Teste):</Text>
-          
-          <View style={styles.credRow}>
-            <Text style={styles.credLabel}>Código de Ativação:</Text>
-            <TouchableOpacity onPress={() => copyToClipboard(createdCredentials.code)}>
-              <Text style={styles.credValue}>{createdCredentials.code} 📋</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.credRow}>
-            <Text style={styles.credLabel}>Token:</Text>
-            <TouchableOpacity onPress={() => copyToClipboard(createdCredentials.token)}>
-              <Text style={styles.credValue}>{createdCredentials.token} 📋</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.credentialsHint}>
-            Dica: Copie estes dados e utilize a opção "Primeiro acesso" na tela inicial para definir a senha do funcionário.
-          </Text>
-        </View>
-      )}
-
       <TouchableOpacity
         style={styles.secondaryButton}
         onPress={() => router.replace("/dashboard")}
       >
         <Text style={styles.secondaryButtonText}>Voltar ao Dashboard</Text>
       </TouchableOpacity>
+      
+      // Modal
+      <FeedbackModal
+        visible={feedback.visible}
+        type={feedback.type}
+        title={feedback.title}
+        message={feedback.message}
+        details={feedback.details}
+        onClose={() => setFeedback((prev) => ({ ...prev, visible: false }))}
+      />
     </ScrollView>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import PerfilButton from "./PerfilButton";
 import { authenticatedFetch } from "../../services/api";
+import PieChartCard from "../common/PieChartCard";
 
 type Occurrence = {
   id: number;
@@ -37,6 +38,14 @@ export default function PerfilMedicalModal({
   // Formulário de justificativa
   const [justificativa, setJustificativa] = useState("");
   const [atestadoText, setAtestadoText] = useState("");
+
+  const atestadosCount = occurrences.filter((o) => !!o.atestado_func).length;
+  const justificativasCount = occurrences.length - atestadosCount;
+
+  const chartData = [
+    { label: "Com Atestado Médicos", value: atestadosCount, color: "#16A34A" },
+    { label: "Justificativas de Faltas", value: justificativasCount, color: "#3B82F6" },
+  ];
 
   const fetchOccurrences = async () => {
     try {
@@ -115,7 +124,15 @@ export default function PerfilMedicalModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ maxHeight: 440 }} showsVerticalScrollIndicator={false}>
+            {/* Gráfico de Estatísticas de Ausências e Atestados */}
+            <PieChartCard
+              title="Resumo de Ocorrências Médicas"
+              subtitle="Distribuição entre atestados e justificativas salvas"
+              data={chartData}
+              size={130}
+            />
+
             {/* Lista de Registros */}
             <Text style={styles.sectionLabel}>Registros Anteriores</Text>
 

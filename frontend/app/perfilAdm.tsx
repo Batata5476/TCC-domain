@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, SafeAreaView, ScrollView, StyleSheet, Text, View, } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import PerfilAction from "../components/perfil/PerfilAction";
@@ -17,6 +9,7 @@ import PerfilInfo from "../components/perfil/PerfilInfo";
 import PerfilMeetingModal from "../components/perfil/PerfilMeetingModal";
 import PerfilMedicalModal from "../components/perfil/PerfilMedicalModal";
 import PerfilPointsModal from "../components/perfil/PerfilPointsModal";
+import PieChartCard from "../components/common/PieChartCard"; 
 import { authenticatedFetch } from "../services/api";
 
 type UserProfile = {
@@ -35,6 +28,8 @@ export default function PerfilAdm() {
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  const [tasks, setTasks] = useState<any[]>([]);
+
   // Estados dos Modais
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [medicalOpen, setMedicalOpen] = useState(false);
@@ -49,6 +44,12 @@ export default function PerfilAdm() {
         const body = await res.json();
         setUser(body.data);
       }
+
+      const tasksRes = await authenticatedFetch("/tasks/my-tasks");
+      if (tasksRes.ok) {
+        const tasksBody = await tasksRes.json();
+        setTasks(tasksBody.data ?? []);
+      }
     } catch (err) {
       console.error("Erro ao carregar perfil adm:", err);
     } finally {
@@ -59,6 +60,17 @@ export default function PerfilAdm() {
   useEffect(() => {
     loadProfile();
   }, []);
+
+  // Estatísticas calculadas dinamicamente com base nas tarefas reais do banco
+  const concluidasCount = tasks.filter((t) => t.status === 1).length;
+  const emAndamentoCount = tasks.filter((t) => t.status === 2).length;
+  const pendentesCount = tasks.filter((t) => t.status === 3).length;
+
+  const taskChartData = [
+    { label: "Concluídas", value: concluidasCount, color: "#10B981" },
+    { label: "Em Andamento", value: emAndamentoCount, color: "#3B82F6" },
+    { label: "Pendentes", value: pendentesCount, color: "#EF4444" },
+  ];
 
   // Upload e Salvar Foto de Perfil
   const handlePickPhoto = async () => {
@@ -135,6 +147,14 @@ export default function PerfilAdm() {
             />
           </>
         )}
+
+        {/* GRÁFICO DE ESTATÍSTICAS DO ADM */}
+        <PieChartCard
+          title="Status das Atividades Gerais"
+          subtitle="Acompanhamento em tempo real das tarefas da equipe"
+          data={taskChartData}
+          size={140}
+        />
 
         {/* FERRAMENTAS DO COLABORADOR */}
         <Text style={styles.sectionTitle}>ferramentas & gestão</Text>

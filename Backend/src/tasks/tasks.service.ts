@@ -160,6 +160,47 @@ export class TasksService {
     };
   }
 
+  // Busca as associações de tarefas e funcionários filtrando pelo ID da empresa  
+    async findAllByCompany(companyId: number) {
+    const associations = await this.funcTarefaRepository.find({
+      where: { fk_cod_empresa: companyId },
+      relations: ['tarefa', 'funcionario'],
+    });
+    
+    // // Filtra as associações válidas e mapeia os dados da tarefa formatados
+    const tasks = associations
+      .filter((assoc) => assoc.tarefa !== null)
+      .map((assoc) => {
+        const rawDate = assoc.tarefa.validade_tarefa;
+        let dueDateStr: string;
+        if (rawDate) {
+          const d = new Date(rawDate);
+          const localYear = d.getUTCFullYear();
+          const localMonth = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const localDay = String(d.getUTCDate()).padStart(2, '0');
+          dueDateStr = `${localYear}-${localMonth}-${localDay}`;
+        } else {
+          dueDateStr = '';
+        }
+        
+        // Retorna os dados resumidos da tarefa e o nome do funcionário associado
+        return {
+          id: assoc.tarefa.pk_id_tarefas,
+          name: assoc.tarefa.tipo_tarefa,
+          employeeName: assoc.funcionario ? assoc.funcionario.nome : 'Funcionário',
+          points: '100',
+          priority: assoc.tarefa.prioridade_tarefa,
+          status: assoc.tarefa.status_tarefa,
+          dueDate: dueDateStr,
+        };
+      });
+
+    return {
+      status: 'success',
+      data: tasks,
+    };
+  }
+
   async updateStatus(taskId: number, status: number, caller: any) {
     await this.validateTaskAccess(taskId, caller);
 

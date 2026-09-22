@@ -20,6 +20,14 @@ export class TasksController {
     return this.tasksService.findAllByEmployee(req.user.sub);
   }
 
+  @Get('company-tasks')
+  @Permissions('tasks.read')
+  async findCompanyTasks(@Req() req) {
+    // Para empresas / administradores
+    const companyId = req.user.empresa_id || req.user.sub;
+    return this.tasksService.findAllByCompany(companyId);
+  }
+
   @Post()
   @Permissions('tasks.create')
   async create(@Req() req, @Body() body: CreateTaskPayloadDto) {

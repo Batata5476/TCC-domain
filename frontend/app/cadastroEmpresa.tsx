@@ -1,9 +1,8 @@
-
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import React, { useState } from "react";
 import { useRouter } from "expo-router";
 import { API_URL } from "../services/config";
-
+import FeedbackModal from "../components/common/FeedbackModal";
 
 type InputProps = {
   placeholder: string;
@@ -23,6 +22,7 @@ function Input({ placeholder, secureTextEntry, value, onChangeText }: InputProps
     />
   );
 }
+
 export default function CadastroEmpresa() {
   const router = useRouter();
   
@@ -33,21 +33,51 @@ export default function CadastroEmpresa() {
   const [senha, setSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
 
+ // Feedback com modal para sucesso, erro, ou informações
+  const [feedback, setFeedback] = useState<{
+    visible: boolean;
+    type: "success" | "error" | "info";
+    title: string;
+    message: string;
+    onCloseAction?: () => void;
+  }>({
+    visible: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
+
   const handleRegister = async () => {
     const cleanCnpj = cnpj.replace(/\D/g, "");
 
     if (!nome || !cleanCnpj || !email || !tipo || !senha) {
-      Alert.alert("Erro", "Por favor, preencha todos os campos.");
+      // Feedback para caso de campos incompletos
+      setFeedback({
+        visible: true,
+        type: "error",
+        title: "Campos Incompletos",
+        message: "Por favor, preencha todos os campos do formulário.",
+      });
       return;
     }
 
     if (cleanCnpj.length !== 14) {
-      Alert.alert("Erro", "Informe um CNPJ válido com 14 números.");
+      setFeedback({
+        visible: true,
+        type: "error",
+        title: "CNPJ Inválido",
+        message: "Informe um CNPJ válido com exatamente 14 dígitos numéricos.",
+      });
       return;
     }
 
     if (senha !== confirmarSenha) {
-      Alert.alert("Erro", "As senhas não coincidem.");
+      setFeedback({
+        visible: true,
+        type: "error",
+        title: "Senhas Divergentes",
+        message: "A senha e a confirmação de senha não coincidem.",
+      });
       return;
     }
 
@@ -68,15 +98,33 @@ export default function CadastroEmpresa() {
 
       const data = await response.json();
 
+      // Exibe feedback de sucesso se o cadastro for realizado ou de erro caso contrário
       if (response.ok) {
-        Alert.alert("Sucesso", "Empresa cadastrada com sucesso!");
-        router.push("/loginEmpresa");
+        setFeedback({
+          visible: true,
+          type: "success",
+          title: "Empresa Cadastrada! ",
+          message: `A empresa "${nome}" foi registrada com sucesso. Você já pode fazer login.`,
+          onCloseAction: () => router.push("/loginEmpresa"),
+        });
       } else {
-        Alert.alert("Erro", data.message || "Falha ao cadastrar empresa.");
+        setFeedback({
+          visible: true,
+          type: "error",
+          title: "Falha no Cadastro",
+          message: data.message || "Erro ao efetuar o cadastro da empresa.",
+        });
       }
-    } catch (error) {
+    }
+    // Feedback para retornar erro de conexão com Backend 
+    catch (error) {
       console.error(error);
-      Alert.alert("Erro", "Não foi possível conectar ao servidor.");
+      setFeedback({
+        visible: true,
+        type: "error",
+        title: "Erro de Conexão",
+        message: "Não foi possível conectar ao servidor backend.",
+      });
     }
   };
 
@@ -101,6 +149,19 @@ export default function CadastroEmpresa() {
       >
         <Text style={styles.secondaryButtonText}>Voltar</Text>
       </TouchableOpacity>
+
+      <FeedbackModal
+        visible={feedback.visible}
+        type={feedback.type}
+        title={feedback.title}
+        message={feedback.message}
+        onClose={() => {
+          setFeedback((prev) => ({ ...prev, visible: false }));
+          if (feedback.onCloseAction) {
+            feedback.onCloseAction();
+          }
+        }}
+      />
     </ScrollView>
   );
 }
