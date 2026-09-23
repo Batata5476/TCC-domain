@@ -11,6 +11,7 @@ import { MeetingParticipant } from './entities/meeting-participant.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { UpdateMeetingDto } from './dto/update-meeting.dto';
+import { UpdateMeetingStatusDto } from './dto/update-meeting-status.dto';
 import { isAdminRole } from '../auth/authorization.constants';
 
 @Injectable()
@@ -31,10 +32,11 @@ export class MeetingsService {
 
     const meeting = await this.meetingRepository.findOne({
       where: { pk_id_reuniao: meetingId },
+      relations: ['solicitante'],
     });
 
     if (!meeting) {
-      throw new NotFoundException('Reuniao nao encontrada');
+      throw new NotFoundException('Reunião não encontrada');
     }
 
     const relations = await this.meetingParticipantRepository.find({
@@ -44,15 +46,17 @@ export class MeetingsService {
 
     if (!isCompanyAdmin) {
       const isParticipant = relations.some((r) => r.fk_id_func === callerId);
-      if (!isParticipant) {
-        throw new ForbiddenException('Voce nao participa desta reuniao');
+      const isRequester = meeting.solicitante_id === callerId;
+      if (!isParticipant && !isRequester) {
+        throw new ForbiddenException('Você não possui acesso a esta reunião');
       }
     } else {
-      const belongsToCompany = relations.some(
-        (r) => r.funcionario && r.funcionario.empresa_id === caller.empresa_id,
-      );
-      if (!belongsToCompany) {
-        throw new ForbiddenException('Esta reuniao nao pertence a funcionarios da sua empresa');
+      const belongsToCompany =
+        (meeting.solicitante && meeting.solicitante.empresa_id === caller.empresa_id) ||
+        relations.some((r) => r.funcionario && r.funcionario.empresa_id === caller.empresa_id);
+
+      if (!belongsToCompany && meeting.solicitante_id !== null) {
+        throw new ForbiddenException('Esta reunião não pertence à sua empresa');
       }
     }
 
@@ -66,7 +70,7 @@ export class MeetingsService {
     const uniqueParticipantIds = [...new Set(participantIds)];
 
     if (uniqueParticipantIds.length === 0) {
-      throw new BadRequestException('A reuniao deve possuir ao menos um participante');
+      return [];
     }
 
     const participants = await this.userRepository.find({
@@ -76,27 +80,77 @@ export class MeetingsService {
     if (participants.length !== uniqueParticipantIds.length) {
       const foundIds = new Set(participants.map((p) => p.id));
       const missingId = uniqueParticipantIds.find((id) => !foundIds.has(id));
-      throw new NotFoundException(`Funcionario convidado com ID ${missingId} nao encontrado`);
+      throw new NotFoundException(`Funcionário convidado com ID ${missingId} não encontrado`);
     }
 
     const externalParticipant = participants.find((p) => p.empresa_id !== companyId);
     if (externalParticipant) {
       throw new ForbiddenException(
-        `O funcionario ${externalParticipant.nome} (ID: ${externalParticipant.id}) pertence a outra empresa`,
+        `O funcionário ${externalParticipant.nome} (ID: ${externalParticipant.id}) pertence a outra empresa`,
       );
     }
 
     return uniqueParticipantIds;
   }
 
+  // ─── Solicitar Reunião (Funcionário ou Empresa) ────────────────────────────
+  async requestMeeting(createDto: CreateMeetingDto, caller: any) {
+    const callerId = caller.sub;
+    const companyId = caller.empresa_id;
+
+    const requestedParticipants = createDto.participants || [];
+    let participantIds = await this.validateParticipantsBelongToCompany(
+      requestedParticipants,
+      companyId,
+    );
+
+    // Garante que o solicitante esteja na lista de participantes
+    if (!participantIds.includes(callerId)) {
+      participantIds.push(callerId);
+    }
+
+    const savedMeeting = await this.dataSource.transaction(async (manager) => {
+      const meeting = manager.create(Meeting, {
+        data_reuniao: new Date(createDto.data_reuniao),
+        horario_reuniao: createDto.horario_reuniao,
+        assunto_reuniao: createDto.assunto_reuniao,
+        tipo_reuniao: createDto.tipo_reuniao,
+        status_reuniao: 'PENDENTE',
+        solicitante_id: callerId,
+      });
+
+      const meetingResult = await manager.save(Meeting, meeting);
+
+      const relations = participantIds.map((participantId) =>
+        manager.create(MeetingParticipant, {
+          fk_id_reuniao: meetingResult.pk_id_reuniao,
+          fk_id_func: participantId,
+        }),
+      );
+      await manager.save(MeetingParticipant, relations);
+
+      return meetingResult;
+    });
+
+    return {
+      status: 'success',
+      message: 'Solicitação de reunião enviada com sucesso',
+      data: savedMeeting,
+    };
+  }
+
+  // ─── Criar Reunião Administrativa (Apenas Empresa) ────────────────────────
   async create(createMeetingDto: CreateMeetingDto, caller: any) {
     const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
-      throw new ForbiddenException('Apenas empresas podem criar reunioes');
+      throw new ForbiddenException('Apenas empresas podem agendar reuniões diretamente');
     }
 
-    const rawParticipants = createMeetingDto.participants;
+    const rawParticipants = createMeetingDto.participants || [];
+    if (rawParticipants.length === 0) {
+      throw new BadRequestException('A reunião deve possuir ao menos um participante convidado');
+    }
 
     const participantIds = await this.validateParticipantsBelongToCompany(
       rawParticipants,
@@ -109,6 +163,8 @@ export class MeetingsService {
         horario_reuniao: createMeetingDto.horario_reuniao,
         assunto_reuniao: createMeetingDto.assunto_reuniao,
         tipo_reuniao: createMeetingDto.tipo_reuniao,
+        status_reuniao: 'AGENDADA',
+        solicitante_id: caller.sub,
       });
 
       const meetingResult = await manager.save(Meeting, meeting);
@@ -131,22 +187,73 @@ export class MeetingsService {
     };
   }
 
+  // ─── Atualizar Status (Aceitar, Recusar, Cancelar) ──────────────────────────
+  async updateStatus(id: number, updateStatusDto: UpdateMeetingStatusDto, caller: any) {
+    const meeting = await this.validateMeetingAccess(id, caller);
+    const isCompanyAdmin = isAdminRole(caller.role);
+    const isRequester = meeting.solicitante_id === caller.sub;
+
+    const newStatus = updateStatusDto.status_reuniao;
+
+    // Se for funcionário que não é admin
+    if (!isCompanyAdmin) {
+      if (!isRequester) {
+        throw new ForbiddenException('Apenas o solicitante da reunião pode alterar seu status');
+      }
+      if (newStatus !== 'CANCELADA') {
+        throw new ForbiddenException('Funcionários só podem cancelar suas próprias solicitações');
+      }
+    }
+
+    meeting.status_reuniao = newStatus;
+    if (newStatus === 'RECUSADA' && updateStatusDto.motivo_recusa) {
+      meeting.motivo_recusa = updateStatusDto.motivo_recusa;
+    }
+
+    const updated = await this.meetingRepository.save(meeting);
+
+    return {
+      status: 'success',
+      message: `Status da reunião alterado para ${newStatus}`,
+      data: updated,
+    };
+  }
+
+  // ─── Listar Reuniões ───────────────────────────────────────────────────────
   async findAll(caller: any) {
     const callerId = caller.sub;
     const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
-      const relations = await this.meetingParticipantRepository.find({
+      const participantRelations = await this.meetingParticipantRepository.find({
         where: { fk_id_func: callerId },
-        relations: ['reuniao'],
+        relations: ['reuniao', 'reuniao.solicitante'],
       });
-      const meetings = relations.map((r) => r.reuniao).filter((m) => m !== null);
+
+      const requestedMeetings = await this.meetingRepository.find({
+        where: { solicitante_id: callerId },
+        relations: ['solicitante'],
+      });
+
+      const allMeetingsMap = new Map<number, Meeting>();
+      participantRelations.forEach((r) => {
+        if (r.reuniao) allMeetingsMap.set(r.reuniao.pk_id_reuniao, r.reuniao);
+      });
+      requestedMeetings.forEach((m) => {
+        allMeetingsMap.set(m.pk_id_reuniao, m);
+      });
+
+      const result = Array.from(allMeetingsMap.values()).sort(
+        (a, b) => new Date(b.data_reuniao).getTime() - new Date(a.data_reuniao).getTime(),
+      );
+
       return {
         status: 'success',
-        data: meetings,
+        data: result,
       };
     } else {
       const meetings = await this.meetingRepository.createQueryBuilder('meeting')
+        .leftJoinAndSelect('meeting.solicitante', 'solicitante')
         .innerJoin(MeetingParticipant, 'mp', 'mp.fk_id_reuniao = meeting.pk_id_reuniao')
         .innerJoin(User, 'user', 'mp.fk_id_func = user.id')
         .where('user.empresa_id = :companyId', { companyId: caller.empresa_id })
@@ -169,11 +276,26 @@ export class MeetingsService {
     }
   }
 
+  // ─── Detalhes da Reunião com Participantes ──────────────────────────────────
   async findOne(id: number, caller: any) {
     const meeting = await this.validateMeetingAccess(id, caller);
+    const participants = await this.meetingParticipantRepository.find({
+      where: { fk_id_reuniao: id },
+      relations: ['funcionario'],
+    });
+
+    const formattedParticipants = participants.map((p) => ({
+      id: p.funcionario ? p.funcionario.id : p.fk_id_func,
+      nome: p.funcionario ? p.funcionario.nome : 'Usuário',
+      email: p.funcionario ? p.funcionario.email : '',
+    }));
+
     return {
       status: 'success',
-      data: meeting,
+      data: {
+        ...meeting,
+        participants: formattedParticipants,
+      },
     };
   }
 
@@ -181,7 +303,7 @@ export class MeetingsService {
     const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
-      throw new ForbiddenException('Apenas empresas podem atualizar reunioes');
+      throw new ForbiddenException('Apenas empresas podem atualizar reuniões');
     }
 
     const meeting = await this.validateMeetingAccess(id, caller);
@@ -221,7 +343,7 @@ export class MeetingsService {
 
       return {
         status: 'success',
-        message: 'Reuniao atualizada com sucesso',
+        message: 'Reunião atualizada com sucesso',
         data: updated,
       };
     }
@@ -230,7 +352,7 @@ export class MeetingsService {
 
     return {
       status: 'success',
-      message: 'Reuniao atualizada com sucesso',
+      message: 'Reunião atualizada com sucesso',
       data: updated,
     };
   }
@@ -239,16 +361,15 @@ export class MeetingsService {
     const isCompanyAdmin = isAdminRole(caller.role);
 
     if (!isCompanyAdmin) {
-      throw new ForbiddenException('Apenas empresas podem excluir reunioes');
+      throw new ForbiddenException('Apenas empresas podem excluir reuniões');
     }
 
     const meeting = await this.validateMeetingAccess(id, caller);
-
     await this.meetingRepository.remove(meeting);
 
     return {
       status: 'success',
-      message: 'Reuniao excluida com sucesso',
+      message: 'Reunião excluída com sucesso',
     };
   }
 }

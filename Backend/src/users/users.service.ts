@@ -64,6 +64,16 @@ export class UsersService {
     return targetUser;
   }
 
+  private sanitizeUser(user: User) {
+    if (!user) return user;
+    const copy = { ...user };
+    delete (copy as any).senha;
+    delete (copy as any).activation_code;
+    delete (copy as any).token;
+    delete (copy as any).token_expiracao;
+    return copy;
+  }
+
   async findAll(caller: any) {
     const isCompanyAdmin = isAdminRole(caller.role);
 
@@ -76,8 +86,10 @@ export class UsersService {
       relations: ['role', 'setor', 'permissions'],
     });
 
-    // Filtra usuários que foram deletados logicamente (Soft Delete)
-    const activeUsers = users.filter((u) => u.status !== 'DELETED');
+    // Filtra usuários que foram deletados logicamente (Soft Delete) e remove campos sensíveis
+    const activeUsers = users
+      .filter((u) => u.status !== 'DELETED')
+      .map((u) => this.sanitizeUser(u));
 
     return {
       status: 'success',
@@ -95,7 +107,7 @@ export class UsersService {
 
     return {
       status: 'success',
-      data: userWithRelations,
+      data: this.sanitizeUser(userWithRelations),
     };
   }
 
@@ -107,6 +119,7 @@ export class UsersService {
     }
 
     const cleanCpf = createUserDto.cpf.replace(/\D/g, '');
+    const cleanEmail = createUserDto.email.trim().toLowerCase();
 
     // Verificar se o CPF já está em uso por um usuário ativo
     const existingCpf = await this.usersRepository.findOne({
@@ -118,7 +131,7 @@ export class UsersService {
 
     // Verificar se o Email já está em uso por um usuário ativo
     const existingEmail = await this.usersRepository.findOne({
-      where: { email: createUserDto.email.trim() },
+      where: { email: cleanEmail },
     });
     if (existingEmail && existingEmail.status !== 'DELETED') {
       throw new BadRequestException('E-mail já cadastrado');
@@ -157,11 +170,11 @@ export class UsersService {
     const dummyPassword = await bcrypt.hash(Math.random().toString(36), 10);
 
     const user = this.usersRepository.create({
-      nome: createUserDto.nome,
-      email: createUserDto.email.trim(),
+      nome: createUserDto.nome.trim(),
+      email: cleanEmail,
       cpf: cleanCpf,
       senha: dummyPassword,
-      cargo: createUserDto.cargo,
+      cargo: createUserDto.cargo ? createUserDto.cargo.trim() : null,
       setor_id: setor.id,
       role_id: role.id,
       empresa_id: caller.empresa_id,
@@ -170,8 +183,9 @@ export class UsersService {
       activation_code: code,
       token: hashedToken,
       token_expiracao: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48h
-      telefone: createUserDto.telefone,
-      foto: createUserDto.foto,
+      telefone: createUserDto.telefone ? createUserDto.telefone.replace(/\D/g, '') : null,
+      foto: createUserDto.foto || null,
+      foto_func: createUserDto.foto || null,
       permissions,
     });
 
@@ -188,20 +202,7 @@ export class UsersService {
     return {
       status: 'success',
       message: 'Funcionário cadastrado com sucesso. As instruções de ativação serão enviadas por e-mail.',
-      data: {
-        id: saved.id,
-        nome: saved.nome,
-        email: saved.email,
-        cpf: saved.cpf,
-        cargo: saved.cargo,
-        setor_id: saved.setor_id,
-        role_id: saved.role_id,
-        empresa_id: saved.empresa_id,
-        status: saved.status,
-        primeiro_acesso: saved.primeiro_acesso,
-        telefone: saved.telefone,
-        foto: saved.foto,
-      },
+      data: this.sanitizeUser(saved),
     };
   }
 
@@ -223,8 +224,8 @@ export class UsersService {
     }
 
     // Atualizar dados cadastrais
-    if (updateUserDto.nome !== undefined) targetUser.nome = updateUserDto.nome;
-    if (updateUserDto.email !== undefined) targetUser.email = updateUserDto.email.trim();
+    if (updateUserDto.nome !== undefined) targetUser.nome = updateUserDto.nome.trim();
+    if (updateUserDto.email !== undefined) targetUser.email = updateUserDto.email.trim().toLowerCase();
     if (updateUserDto.foto !== undefined) {
       targetUser.foto = updateUserDto.foto;
       targetUser.foto_func = updateUserDto.foto;
@@ -233,8 +234,8 @@ export class UsersService {
       targetUser.foto = updateUserDto.foto_func;
       targetUser.foto_func = updateUserDto.foto_func;
     }
-    if (updateUserDto.telefone !== undefined) targetUser.telefone = updateUserDto.telefone;
-    if (updateUserDto.cargo !== undefined) targetUser.cargo = updateUserDto.cargo;
+    if (updateUserDto.telefone !== undefined) targetUser.telefone = updateUserDto.telefone ? updateUserDto.telefone.replace(/\D/g, '') : null;
+    if (updateUserDto.cargo !== undefined) targetUser.cargo = updateUserDto.cargo ? updateUserDto.cargo.trim() : null;
 
     if (updateUserDto.senha !== undefined) {
       // Validar senha
@@ -260,7 +261,7 @@ export class UsersService {
           where: { id: updateUserDto.setor_id, empresa_id: caller.empresa_id },
         });
         if (!sector) {
-          throw new NotFoundException('Setor não encontrado');
+          throw new NotFoundException('Setor não encontrado ou não pertence à sua empresa');
         }
         targetUser.setor_id = sector.id;
       }
@@ -298,7 +299,7 @@ export class UsersService {
     return {
       status: 'success',
       message: 'Usuário atualizado com sucesso',
-      data: saved,
+      data: this.sanitizeUser(saved),
     };
   }
 
@@ -324,7 +325,6 @@ export class UsersService {
       entidade_id: user.id,
       detalhes: `Usuário ${user.nome} (ID: ${user.id}) removido logicamente (Soft Delete)`,
     });
-
 
     return {
       status: 'success',

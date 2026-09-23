@@ -1,28 +1,39 @@
 import { Controller, Get, Post, Body, Param, Delete, UseGuards, Req } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { CreateMessageDto } from './dto/create-message.dto';
+import { CreateConversationDto } from './dto/create-conversation.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { Permissions } from '../auth/authorization.decorators';
 
-// todas as rotas exigem um token JWT válido para acesso
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  
-  @Get()
+  @Get('contacts')
   @Permissions('chat.read')
-  findAll(@Req() req) {
-    return this.chatService.findAll(req.user);
+  getContacts(@Req() req) {
+    return this.chatService.getContacts(req.user);
   }
 
-  @Get(':id')
+  @Get('conversations')
   @Permissions('chat.read')
-  findOne(@Param('id') id: string, @Req() req) {
-    return this.chatService.findOne(+id, req.user);
+  getConversations(@Req() req) {
+    return this.chatService.getConversations(req.user);
+  }
+
+  @Post('conversations')
+  @Permissions('chat.create')
+  createConversation(@Body() dto: CreateConversationDto, @Req() req) {
+    return this.chatService.createConversation(dto, req.user);
+  }
+
+  @Get(':id/messages')
+  @Permissions('chat.read')
+  getMessages(@Param('id') id: string, @Req() req) {
+    return this.chatService.getMessages(+id, req.user);
   }
 
   @Post()

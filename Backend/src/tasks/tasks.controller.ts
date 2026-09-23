@@ -16,8 +16,7 @@ export class TasksController {
   @Get('my-tasks')
   @Permissions('tasks.read')
   async findMyTasks(@Req() req) {
-    // Para funcionários (type: 'user')
-    return this.tasksService.findAllByEmployee(req.user.sub);
+    return this.tasksService.findAllByEmployee(req.user);
   }
 
   @Get('company-tasks')
@@ -33,7 +32,7 @@ export class TasksController {
   async create(@Req() req, @Body() body: CreateTaskPayloadDto) {
     return this.tasksService.create({
       tipo_tarefa: body.tipo_tarefa,
-      validade_tarefa: new Date(body.validade_tarefa),
+      validade_tarefa: body.validade_tarefa,
       prioridade_tarefa: body.prioridade_tarefa,
       fk_id_func: body.fk_id_func,
     }, req.user);

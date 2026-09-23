@@ -63,6 +63,8 @@ export default function Dashboard() {
   // Estados de UI
   const [open, setOpen] = useState(true);
   const [otherOpen, setOtherOpen] = useState(true);
+  const [pendingOpen, setPendingOpen] = useState(true);
+  const [completedOpen, setCompletedOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hoveredDate, setHoveredDate] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,7 +151,7 @@ export default function Dashboard() {
 
         if (companyRes.ok) {
           const body = await companyRes.json();
-          setCompanyData(body);
+          setCompanyData(body.data ?? body);
         }
 
         const userRes = await authenticatedFetch("/dashboard/user");
@@ -239,24 +241,20 @@ export default function Dashboard() {
       });
 
       if (response.ok) {
-        const label =
-          newStatus === 1
-            ? "Concluída!"
-            : newStatus === 2
-            ? "Em Andamento!"
-            : "Pendente!";
-
-        Alert.alert(
-          "Sucesso 🎉",
-          `Status da tarefa alterado para ${label}`
+        setTasks((prevTasks) =>
+          prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
         );
 
+        if (newStatus === 1) {
+          Alert.alert("Parabéns! 🎉", "Você concluiu a tarefa com sucesso e acumulou +100 pontos!");
+        } else {
+          const label = newStatus === 2 ? "Em andamento" : "Pendente";
+          Alert.alert("Status Atualizado 👏", `Status da tarefa alterado para: ${label}`);
+        }
         fetchDashboard();
       } else {
-        Alert.alert(
-          "Erro",
-          "Não foi possível atualizar o status da tarefa."
-        );
+        const err = await response.json().catch(() => ({}));
+        Alert.alert("Erro", err.message || "Não foi possível atualizar o status da tarefa.");
       }
     } catch (e) {
       console.error(e);
@@ -411,6 +409,25 @@ export default function Dashboard() {
   const urgentTasks = activeTasks.filter((t) => t.priority === 1);
   const otherTasks = activeTasks.filter((t) => t.priority === 2);
 
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const todayStr = `${year}-${month}-${day}`;
+
+  const pendingTasks = tasks.filter((t) => {
+    if (t.status === 1) return false;
+    if (t.status === 3) return true;
+    if (!t.dueDate) return false;
+    const taskDateOnly =
+      typeof t.dueDate === "string" && t.dueDate.includes("T")
+        ? t.dueDate.split("T")[0]
+        : String(t.dueDate);
+    return taskDateOnly < todayStr;
+  });
+
+  const completedTasks = tasks.filter((t) => t.status === 1);
+
   // ── Renderização de item de tarefa ─────────────────────────────────────────
 
   const renderTask = (task: TaskItem) => {
@@ -418,13 +435,12 @@ export default function Dashboard() {
 
     return (
       <View key={task.id} style={styles.taskItem}>
-        <View
-          style={[
-            styles.statusDot,
-            task.status === 2 && { backgroundColor: "#D97706" },
-            task.status === 3 && { backgroundColor: "#94A3B8" },
-          ]}
-        />
+        <View style={[
+          styles.statusDot,
+          task.status === 1 && { backgroundColor: "#10B981" },
+          task.status === 2 && { backgroundColor: "#D97706" },
+          task.status === 3 && { backgroundColor: "#94A3B8" },
+        ]} />
 
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -433,20 +449,9 @@ export default function Dashboard() {
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={styles.taskName}>{task.name}</Text>
-
-          <Text
-            style={{
-              fontSize: 10,
-              color: task.status === 2 ? "#D97706" : "#94A3B8",
-              marginTop: 1,
-            }}
-          >
-            {task.status === 3
-              ? "Pendente"
-              : task.status === 2
-              ? "Em andamento"
-              : "Concluída"}
+          <Text style={[styles.taskName, task.status === 1 && { textDecorationLine: "line-through", color: "#64748B" }]}>{task.name}</Text>
+          <Text style={{ fontSize: 10, color: task.status === 1 ? "#10B981" : task.status === 2 ? "#D97706" : "#94A3B8", marginTop: 1 }}>
+            {task.status === 3 ? "Pendente" : task.status === 2 ? "Em andamento" : "Concluída"}
           </Text>
         </View>
 
@@ -476,9 +481,10 @@ export default function Dashboard() {
             </TouchableOpacity>
           )}
 
+          {/* Concluir Tarefa (Status 3 ou 2 -> 1) */}
           {(task.status === 3 || task.status === 2) && (
             <TouchableOpacity
-              style={styles.checkButton}
+              style={[styles.checkButton, { backgroundColor: "#10B981" }]}
               activeOpacity={0.8}
               onPress={() => handleUpdateTaskStatus(task.id, 1)}
             >
@@ -490,6 +496,14 @@ export default function Dashboard() {
             </TouchableOpacity>
           )}
 
+          {/* Indicador visual de Tarefa já Concluída */}
+          {task.status === 1 && (
+            <View style={[styles.checkButton, { backgroundColor: "#D1FAE5" }]}>
+              <Ionicons name="checkmark-done" size={18} color="#059669" />
+            </View>
+          )}
+
+          {/* Empresa pode resetar para Pendente se estava Em Andamento */}
           {isCompany && task.status === 2 && (
             <TouchableOpacity
               style={[
@@ -681,15 +695,88 @@ export default function Dashboard() {
         </View>
 
         {/* NOVO CARD: Tarefas Pendentes */}
+        {/* Card Tarefas Pendentes */}
         <View
           style={[
             styles.card,
             styles.cardSpacing,
           ]}
         >
-          <Text style={styles.cardTitle}>
-            Tarefas Pendentes
-          </Text>
+          <TouchableOpacity
+            style={styles.cardHeader}
+            onPress={() =>
+              setPendingOpen(!pendingOpen)
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cardTitle}>
+              Tarefas Pendentes
+            </Text>
+
+            <Ionicons
+              name={
+                pendingOpen
+                  ? "chevron-up"
+                  : "chevron-down"
+              }
+              size={24}
+              color="#285A71"
+            />
+          </TouchableOpacity>
+
+          {pendingOpen && (
+            <View style={styles.taskList}>
+              {pendingTasks.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  Nenhuma tarefa pendente.
+                </Text>
+              ) : (
+                pendingTasks.map(renderTask)
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* Card Tarefas Concluídas */}
+        <View
+          style={[
+            styles.card,
+            styles.cardSpacing,
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.cardHeader}
+            onPress={() =>
+              setCompletedOpen(!completedOpen)
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cardTitle}>
+              Tarefas Concluídas
+            </Text>
+
+            <Ionicons
+              name={
+                completedOpen
+                  ? "chevron-up"
+                  : "chevron-down"
+              }
+              size={24}
+              color="#285A71"
+            />
+          </TouchableOpacity>
+
+          {completedOpen && (
+            <View style={styles.taskList}>
+              {completedTasks.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  Nenhuma tarefa concluída.
+                </Text>
+              ) : (
+                completedTasks.map(renderTask)
+              )}
+            </View>
+          )}
         </View>
 
         <View style={{ height: 120 }} />
@@ -787,10 +874,7 @@ export default function Dashboard() {
             setAccountModalVisible(false)
           }
         >
-          <Pressable
-            style={styles.accountModal}
-            onPress={() => {}}
-          >
+          <Pressable style={styles.accountModal} onPress={() => {}}>
             <View style={styles.accountModalHeader}>
               <Text
                 style={styles.accountModalTitle}

@@ -1,8 +1,8 @@
-import { IsInt, Min, Max } from 'class-validator';
+import { IsInt, IsIn } from 'class-validator';
 
 export class UpdateTaskStatusDto {
   @IsInt()
-  @Min(1)
-  @Max(4)
+  @IsIn([1, 2, 3])
   status: number;
 }
+

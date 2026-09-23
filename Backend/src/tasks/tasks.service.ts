@@ -84,17 +84,24 @@ export class TasksService {
     // 1. Cria a tarefa
     // Normaliza a data: trata string YYYY-MM-DD como data LOCAL para evitar
     // conversão UTC que deslocaria o dia (ex: '2026-08-30' → 29T03:00Z em UTC-3)
+    console.log('[DEBUG TasksService] data.validade_tarefa recebida:', data.validade_tarefa, 'tipo:', typeof data.validade_tarefa);
     let validadeNormalizada: string;
-    if (typeof data.validade_tarefa === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.validade_tarefa)) {
-      validadeNormalizada = data.validade_tarefa; // já está no formato correto para tipo DATE
+    if (typeof data.validade_tarefa === 'string') {
+      const match = data.validade_tarefa.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) {
+        validadeNormalizada = match[1];
+      } else {
+        const d = new Date(data.validade_tarefa);
+        validadeNormalizada = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      }
     } else {
       const d = new Date(data.validade_tarefa);
-      validadeNormalizada = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      validadeNormalizada = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     }
 
     const task = this.taskRepository.create({
       tipo_tarefa: data.tipo_tarefa,
-      validade_tarefa: validadeNormalizada as unknown as Date,
+      validade_tarefa: validadeNormalizada,
       prioridade_tarefa: data.prioridade_tarefa,
       status_tarefa: 3, // 3 = Pendente por padrão
     });
@@ -117,29 +124,39 @@ export class TasksService {
     };
   }
 
-  async findAllByEmployee(employeeId: number) {
-    const associations = await this.funcTarefaRepository.find({
-      where: { fk_id_func: employeeId },
-      relations: ['tarefa'],
-    });
+  async findAllByEmployee(caller: any) {
+    const isCompanyAdmin = isAdminRole(caller.role);
+    
+    let associations: FuncTarefa[];
+    if (isCompanyAdmin) {
+      associations = await this.funcTarefaRepository.find({
+        where: { fk_cod_empresa: caller.empresa_id },
+        relations: ['tarefa'],
+      });
+    } else {
+      associations = await this.funcTarefaRepository.find({
+        where: { fk_id_func: caller.sub },
+        relations: ['tarefa'],
+      });
+    }
 
     const tasks = associations
       .filter((assoc) => assoc.tarefa !== null)
       .map((assoc) => {
-        // Normaliza a data: PostgreSQL retorna tipo DATE como meia-noite UTC,
-        // o que causa deslocamento de um dia em fusos UTC-N.
-        // Extraímos apenas YYYY-MM-DD direto da ISO string para preservar a data original.
-        const rawDate = assoc.tarefa.validade_tarefa;
+        const rawDate: any = assoc.tarefa.validade_tarefa;
         let dueDateStr: string;
         if (rawDate) {
-          const iso = new Date(rawDate).toISOString(); // ex: "2026-08-30T03:00:00.000Z"
-          dueDateStr = iso.split('T')[0];              // ex: "2026-08-30" ✓ — mas ERRADO p/ UTC-3 (seria 2026-08-29T03)
-          // CORREÇÃO: soma o offset para obter a data local correta
-          const d = new Date(rawDate);
-          const localYear = d.getUTCFullYear();
-          const localMonth = String(d.getUTCMonth() + 1).padStart(2, '0');
-          const localDay = String(d.getUTCDate()).padStart(2, '0');
-          dueDateStr = `${localYear}-${localMonth}-${localDay}`;
+          if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+            dueDateStr = rawDate.split('T')[0];
+          } else {
+            const d = new Date(rawDate);
+            // pg driver converte tipo DATE do Postgres para Date JS meianoite UTC (00:00:00.000Z).
+            // Usar getUTCFullYear/getUTCMonth/getUTCDate preserva exatamente o dia gravado no banco sem subtrair fuso local.
+            const year = d.getUTCFullYear();
+            const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            dueDateStr = `${year}-${month}-${day}`;
+          }
         } else {
           dueDateStr = '';
         }
@@ -236,8 +253,23 @@ export class TasksService {
       }
     }
 
+    const previousStatus = task.status_tarefa;
     task.status_tarefa = status;
     const updated = await this.taskRepository.save(task);
+
+    // Se o novo status for 1 (Concluída) e antes não era 1, incrementa 100 pontos para o usuário atribuído
+    if (status === 1 && previousStatus !== 1) {
+      const relation = await this.funcTarefaRepository.findOne({
+        where: { fk_id_tarefa: taskId },
+      });
+      if (relation && relation.fk_id_func) {
+        await this.userRepository.increment(
+          { id: relation.fk_id_func },
+          'pontos_acumulados',
+          100,
+        );
+      }
+    }
 
     return {
       status: 'success',

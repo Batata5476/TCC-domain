@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { authenticatedFetch } from "../services/api";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -153,29 +154,59 @@ export default function ChatScreen() {
   const router = useRouter();
 
   // Estados
-  const [chats, setChats] = useState<ChatListItem[]>(INITIAL_CHATS);
+  const [chats, setChats] = useState<ChatListItem[]>([]);
+  const [contactsList, setContactsList] = useState<ContactItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"mensagens" | "contatos">("mensagens");
   const [selectedChat, setSelectedChat] = useState<ChatListItem | null>(null);
   const [inputText, setInputText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Carrega conversas do backend
+  const loadConversations = async () => {
+    try {
+      const res = await authenticatedFetch('/chat/conversations');
+      if (res.ok) {
+        const body = await res.json();
+        setChats(body.data ?? []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Carrega contatos da empresa do backend
+  const loadContacts = async () => {
+    try {
+      const res = await authenticatedFetch('/chat/contacts');
+      if (res.ok) {
+        const body = await res.json();
+        setContactsList(body.data ?? []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    loadConversations();
+    loadContacts();
+  }, []);
 
   // Lista filtrada de conversas com base na busca
   const filteredChats = chats.filter((chat) =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+    (chat.lastMessage && chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Lista de contatos (apenas contatos individuais)
-  const contactsList = chats.map(c => ({
-    id: c.id,
-    name: c.name,
-    avatar: c.avatar,
-    online: c.online,
-    role: c.role,
-  }));
+  // Lista filtrada de contatos
+  const filteredContacts = contactsList.filter((contact) =>
+    contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    contact.role.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Auto-scroll para o fim das mensagens quando abre um chat ou envia mensagem
   useEffect(() => {
@@ -186,67 +217,85 @@ export default function ChatScreen() {
     }
   }, [selectedChat, selectedChat?.messages]);
 
-  // Abre uma conversa
-  const handleOpenChat = (chat: ChatListItem) => {
-    setSelectedChat(chat);
-    // Limpa contagem de não lidas ao abrir
-    setChats(prev =>
-      prev.map(c => (c.id === chat.id ? { ...c, unreadCount: 0 } : c))
-    );
+  // Abre uma conversa existente e carrega o histórico de mensagens
+  const handleOpenChat = async (chat: ChatListItem) => {
+    setSelectedChat({ ...chat, messages: [] });
+    try {
+      const res = await authenticatedFetch(`/chat/${chat.id}/messages`);
+      if (res.ok) {
+        const body = await res.json();
+        setSelectedChat({ ...chat, messages: body.data ?? [] });
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  // Envia mensagem
-  const handleSendMessage = () => {
+  // Seleciona um contato da lista de contatos para criar ou abrir conversa
+  const handleSelectContact = async (contact: ContactItem) => {
+    try {
+      const res = await authenticatedFetch('/chat/conversations', {
+        method: 'POST',
+        body: JSON.stringify({ targetUserId: contact.id }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const chatId = body.data?.id;
+        if (chatId) {
+          await loadConversations();
+          const targetChat: ChatListItem = {
+            id: chatId,
+            name: contact.name,
+            avatar: contact.avatar,
+            online: contact.online,
+            lastMessage: 'Conversa iniciada',
+            time: 'Agora',
+            unreadCount: 0,
+            role: contact.role,
+            messages: [],
+          };
+          handleOpenChat(targetChat);
+          setActiveTab('mensagens');
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Erro", "Não foi possível abrir a conversa com este contato.");
+    }
+  };
+
+  // Envia mensagem real via API
+  const handleSendMessage = async () => {
     if (!inputText.trim() || !selectedChat) return;
 
-    const newMessage: ChatMessage = {
-      id: Math.random().toString(),
-      text: inputText.trim(),
-      sender: "me",
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    const updatedMessages = [...selectedChat.messages, newMessage];
-
-    // Atualiza a conversa selecionada e a lista global
-    const updatedChat = {
-      ...selectedChat,
-      messages: updatedMessages,
-      lastMessage: inputText.trim(),
-      time: "Agora",
-    };
-
-    setSelectedChat(updatedChat);
-    setChats(prev => prev.map(c => (c.id === selectedChat.id ? updatedChat : c)));
+    const textToSend = inputText.trim();
     setInputText("");
 
-    // Resposta automática simulada (bot do demo)
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      const responses = AUTO_RESPONSES[selectedChat.id] || ["Mensagem recebida com sucesso!"];
-      const randomReply = responses[Math.floor(Math.random() * responses.length)];
+    try {
+      const res = await authenticatedFetch('/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          fk_id_chat: selectedChat.id,
+          conteudo_mensagens: textToSend,
+        }),
+      });
 
-      const botReply: ChatMessage = {
-        id: Math.random().toString(),
-        text: randomReply,
-        sender: "them",
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      const finalMessages = [...updatedMessages, botReply];
-      const finalChat = {
-        ...updatedChat,
-        messages: finalMessages,
-        lastMessage: randomReply,
-        time: "Agora",
-      };
-
-      if (selectedChat.id === finalChat.id) {
-        setSelectedChat(finalChat);
+      if (res.ok) {
+        // Atualiza a lista de mensagens do chat ativo
+        const msgRes = await authenticatedFetch(`/chat/${selectedChat.id}/messages`);
+        if (msgRes.ok) {
+          const body = await msgRes.json();
+          setSelectedChat(prev => prev ? { ...prev, messages: body.data ?? [] } : null);
+        }
+        loadConversations();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Erro", err.message || "Não foi possível enviar a mensagem.");
       }
-      setChats(prev => prev.map(c => (c.id === finalChat.id ? finalChat : c)));
-    }, 1500);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Erro", "Erro ao enviar a mensagem.");
+    }
   };
 
   return (
@@ -349,15 +398,12 @@ export default function ChatScreen() {
         </ScrollView>
       ) : (
         <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
-          {contactsList.map((contact) => (
+          {filteredContacts.map((contact) => (
             <TouchableOpacity
               key={contact.id}
               style={styles.chatItem}
               activeOpacity={0.7}
-              onPress={() => {
-                const foundChat = chats.find(c => c.id === contact.id);
-                if (foundChat) handleOpenChat(foundChat);
-              }}
+              onPress={() => handleSelectContact(contact)}
             >
               <View style={styles.avatarContainer}>
                 <View style={[styles.avatar, { backgroundColor: "#66B300" }]}>
