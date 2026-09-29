@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   Alert,
@@ -9,9 +9,11 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import PerfilButton from "./PerfilButton";
 import { authenticatedFetch } from "../../services/api";
+import { getUserType } from "../../services/auth";
 
 type PerfilMeetingModalProps = {
   visible: boolean;
@@ -31,37 +33,78 @@ export default function PerfilMeetingModal({
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [time, setTime] = useState("14:00");
   const [submitting, setSubmitting] = useState(false);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
+  const [userTypeState, setUserTypeState] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      (async () => {
+        const type = await getUserType();
+        setUserTypeState(type);
+
+        try {
+          const res = await authenticatedFetch("/users");
+          if (res.ok) {
+            const body = await res.json();
+            setEmployees(body.data ?? []);
+          }
+        } catch {
+          // fallback silencioso se não conseguir carregar usuários
+        }
+      })();
+    }
+  }, [visible]);
 
   const handleConfirm = async () => {
     if (!subject.trim()) {
-      Alert.alert("Campo obrigatório", "Por favor, informe o assunto da reunião.");
+      Alert.alert("Reunião não realizada ⚠️", "Por favor, informe o assunto da reunião.");
+      return;
+    }
+
+    if (userTypeState === "company" && selectedParticipantIds.length === 0) {
+      Alert.alert("Reunião não realizada ⚠️", "Por favor, selecione ao menos um participante convidado.");
       return;
     }
 
     try {
       setSubmitting(true);
-      const res = await authenticatedFetch("/meetings", {
+      const isCompany = userTypeState === "company";
+      const endpoint = isCompany ? "/meetings" : "/meetings/request";
+
+      const res = await authenticatedFetch(endpoint, {
         method: "POST",
         body: JSON.stringify({
           data_reuniao: date,
           horario_reuniao: time,
           assunto_reuniao: subject.trim(),
           tipo_reuniao: "empresarial",
-          participants: [],
+          participants: selectedParticipantIds,
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Erro ao agendar reunião.");
+        throw new Error(data.message || "Erro ao agendar reunião.");
       }
 
-      Alert.alert("Sucesso", "Reunião solicitada com sucesso!");
+      Alert.alert(
+        "Reunião marcada com sucesso 🎉",
+        isCompany
+          ? "A reunião foi agendada e os participantes foram notificados!"
+          : "Sua solicitação de reunião foi enviada à administração!"
+      );
+
       setSubject("");
+      setSelectedParticipantIds([]);
       onClose();
       if (onSuccess) onSuccess();
     } catch (err: any) {
-      Alert.alert("Atenção", err.message || "Não foi possível criar a reunião.");
+      Alert.alert(
+        "Reunião não realizada ⚠️",
+        err.message || "Não foi possível registrar a reunião no sistema."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -77,7 +120,9 @@ export default function PerfilMeetingModal({
       <View style={styles.modalOverlay}>
         <View style={styles.modalBox}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>solicitar reunião</Text>
+            <Text style={styles.modalTitle}>
+              {userTypeState === "company" ? "Agendar Reunião" : "Solicitar Reunião"}
+            </Text>
 
             <TouchableOpacity onPress={onClose} disabled={submitting}>
               <Ionicons
@@ -125,7 +170,7 @@ export default function PerfilMeetingModal({
                 size={20}
                 color="#263238"
               />
-              <Text style={styles.optionTitle}>assunto reunião</Text>
+              <Text style={styles.optionTitle}>assunto da reunião</Text>
             </View>
 
             <TextInput
@@ -137,6 +182,41 @@ export default function PerfilMeetingModal({
               style={styles.subjectInput}
             />
           </View>
+
+          {employees.length > 0 && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={[styles.optionTitle, { marginBottom: 6 }]}>
+                participantes / colaboradores
+              </Text>
+
+              <ScrollView style={{ maxHeight: 110, borderWidth: 1, borderColor: "#D8D3D8", borderRadius: 6, padding: 4 }} nestedScrollEnabled>
+                {employees.map((emp) => {
+                  const sel = selectedParticipantIds.includes(emp.id);
+                  return (
+                    <TouchableOpacity
+                      key={emp.id}
+                      style={[
+                        styles.empRow,
+                        sel && styles.empRowActive,
+                      ]}
+                      onPress={() => {
+                        if (sel) {
+                          setSelectedParticipantIds((prev) => prev.filter((id) => id !== emp.id));
+                        } else {
+                          setSelectedParticipantIds((prev) => [...prev, emp.id]);
+                        }
+                      }}
+                    >
+                      <Text style={[styles.empText, sel && styles.empTextActive]}>
+                        {emp.nome}
+                      </Text>
+                      {sel && <Ionicons name="checkmark" size={14} color="#285A71" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           <View style={styles.modalButtons}>
             {submitting ? (
@@ -205,11 +285,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     color: "#263238",
-  },
-
-  optionValue: {
-    fontSize: 10,
-    color: "#777777",
+    fontWeight: "600",
   },
 
   optionInput: {
@@ -236,16 +312,40 @@ const styles = StyleSheet.create({
   },
 
   subjectInput: {
-    height: 62,
+    height: 55,
     borderWidth: 1,
     borderColor: "#CEC8CE",
     borderRadius: 7,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    fontSize: 10,
+    fontSize: 11,
     color: "#263238",
     textAlignVertical: "top",
     backgroundColor: "#F5F5F5",
+  },
+
+  empRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    marginBottom: 2,
+  },
+
+  empRowActive: {
+    backgroundColor: "#E2E8F0",
+  },
+
+  empText: {
+    fontSize: 11,
+    color: "#475569",
+  },
+
+  empTextActive: {
+    fontWeight: "700",
+    color: "#285A71",
   },
 
   modalButtons: {
