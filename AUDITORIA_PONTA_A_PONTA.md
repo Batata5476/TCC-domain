@@ -136,11 +136,11 @@
 
 ### Ocorrencias e registros medicos
 
-- [ ] Alinhar `pk_id_his_medico` do backend com o campo `id` usado no frontend.
-- [ ] Corrigir edicao e remocao usando o identificador real.
-- [ ] Revisar protecao de dados medicos sensiveis.
-- [ ] Garantir que funcionario veja somente seus registros.
-- [ ] Garantir que administrador veja somente registros de sua empresa.
+- [x] Alinhar `pk_id_his_medico` do backend com o campo `id` usado no frontend.
+- [x] Corrigir edicao e remocao usando o identificador real.
+- [x] Revisar protecao de dados medicos sensiveis.
+- [x] Garantir que funcionario veja somente seus registros.
+- [x] Garantir que administrador veja somente registros de sua empresa.
 
 ---
 

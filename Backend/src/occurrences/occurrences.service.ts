@@ -1,3 +1,4 @@
+
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -29,23 +30,31 @@ export class OccurrencesService {
       throw new NotFoundException(`Registro médico com ID ${occurrenceId} não encontrado`);
     }
 
-    if (!isCompanyAdmin) {
-      if (occurrence.fk_id_func !== callerId) {
-        throw new ForbiddenException('Você não possui acesso a este registro médico');
-      }
-    } else {
-      const employee = await this.userRepository.findOne({
-        where: { id: occurrence.fk_id_func },
-      });
-
-      if (!employee || employee.empresa_id !== caller.empresa_id) {
-        throw new ForbiddenException('Este registro médico não pertence a um funcionário da sua empresa');
-      }
-    }
-
-    return occurrence;
+if (caller.role === ROLES.EMPLOYEE) {
+  if (occurrence.fk_id_func !== callerId) {
+    throw new ForbiddenException(
+      'Você não possui acesso a este registro médico',
+    );
   }
+} else if (isCompanyAdmin) {
+  const employee = await this.userRepository.findOne({
+    where: { id: occurrence.fk_id_func },
+  });
 
+  if (!employee || employee.empresa_id !== caller.empresa_id) {
+    throw new ForbiddenException(
+      'Este registro médico não pertence a um funcionário da sua empresa',
+    );
+  }
+} else {
+  throw new ForbiddenException(
+    'Seu perfil não possui acesso aos registros médicos',
+  );
+}
+
+return occurrence;
+  }
+    
   async create(createOccurrenceDto: CreateOccurrenceDto, caller: any) {
     if (caller.role !== ROLES.EMPLOYEE) {
       throw new ForbiddenException('Apenas funcionários podem registrar ocorrências médicas');
@@ -68,34 +77,52 @@ export class OccurrencesService {
     };
   }
 
-  async findAll(caller: any) {
+    async findAll(caller: any) {
     const callerId = caller.sub;
     const isCompanyAdmin =
       isAdminRole(caller.role);
 
-    if (!isCompanyAdmin) {
+    if (caller.role === ROLES.EMPLOYEE) {
       const occurrences = await this.occurrenceRepository.find({
         where: { fk_id_func: callerId },
         order: { pk_id_his_medico: 'DESC' },
       });
+
       return {
         status: 'success',
         data: occurrences,
       };
-    } else {
-      const occurrences = await this.occurrenceRepository.createQueryBuilder('occurrence')
-        .innerJoin(User, 'user', 'occurrence.fk_id_func = user.id')
-        .where('user.empresa_id = :companyId', { companyId: caller.empresa_id })
-        .orderBy('occurrence.pk_id_his_medico', 'DESC')
+
+    } else if (isCompanyAdmin) {
+      const occurrences = await this.occurrenceRepository
+        .createQueryBuilder('occurrence')
+        .innerJoin(
+          User,
+          'user',
+          'occurrence.fk_id_func = user.id',
+        )
+        .where(
+          'user.empresa_id = :companyId',
+          { companyId: caller.empresa_id },
+        )
+        .orderBy(
+          'occurrence.pk_id_his_medico',
+          'DESC',
+        )
         .getMany();
 
       return {
         status: 'success',
         data: occurrences,
       };
+
+    } else {
+      throw new ForbiddenException(
+        'Seu perfil não possui acesso aos registros médicos',
+      );
     }
   }
-
+  
   async findOne(id: number, caller: any) {
     const occurrence = await this.validateOccurrenceAccess(id, caller);
     return {
