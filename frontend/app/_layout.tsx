@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="cadastroEmpresa" options={{ title: "Cadastro empresa" }} />
         <Stack.Screen name="cadastroFuncionario" options={{ title: "Cadastro funcionario" }} />
         <Stack.Screen name="dashboard" options={{ title: "Dashboard" }} />
+        <Stack.Screen name="ponto-e" options={{ title: "Ponto-E" }} />
         <Stack.Screen name="chat" options={{ title: "Conversas" }} />
         <Stack.Screen name="perfilAdm" options={{ title: "Perfil Administrativo", headerShown: false }} />
         <Stack.Screen name="perfilFunc" options={{ title: "Perfil Colaborador", headerShown: false }} />

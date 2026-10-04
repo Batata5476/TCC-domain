@@ -1270,6 +1270,24 @@ export default function Dashboard() {
           style={styles.navButton}
           activeOpacity={0.8}
           onPress={() =>
+            router.push("/ponto-e")
+          }
+        >
+          <Ionicons
+            name="location"
+            size={26}
+            color="#285A71"
+          />
+
+          <Text style={styles.navLabel}>
+            Ponto-E
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.navButton}
+          activeOpacity={0.8}
+          onPress={() =>
             router.push("/chat")
           }
         >

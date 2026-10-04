@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, SafeAreaView, ScrollView, StyleSheet, Text, View, } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import PerfilAction from "../components/perfil/PerfilAction";
 import PerfilAvatar from "../components/perfil/PerfilAvatar";
 import PerfilHeader from "../components/perfil/perfilHeader";
@@ -21,12 +22,21 @@ type UserProfile = {
   foto?: string | null;
   pontos?: number;
 };
+// Tipo parar armazenar latitude e longitude da empresa de tipo número ou string
+type CompanyLocation = {
+    id: number;
+    latitude: number | string | null;
+    longitude: number | string | null;
+  };
 
 export default function PerfilAdm() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [companyLocation, setCompanyLocation] = useState<CompanyLocation | null>(null);
+  const [savingCompanyLocation, setSavingCompanyLocation] = useState(false);
+
 
   const [tasks, setTasks] = useState<any[]>([]);
 
@@ -50,6 +60,14 @@ export default function PerfilAdm() {
         const tasksBody = await tasksRes.json();
         setTasks(tasksBody.data ?? []);
       }
+
+
+      // Carrega a localização da empresa do usuário logado
+      const companyRes = await authenticatedFetch("/company");
+       if (companyRes.ok) {
+        const companyBody = await companyRes.json();
+        setCompanyLocation(companyBody.data?.[0] ?? null);
+       }
     } catch (err) {
       console.error("Erro ao carregar perfil adm:", err);
     } finally {
@@ -114,6 +132,59 @@ export default function PerfilAdm() {
     }
   };
 
+  // Função para salvar a localização da empresa com latitudo e longitude atuais do GPS do dispositivo
+  const handleSaveCompanyLocation = async () => {
+    if (savingCompanyLocation) return;
+
+    if (!companyLocation?.id) {
+      Alert.alert("Empresa não encontrada", "Recarregue o perfil e tente novamente.");
+      return;
+    }
+
+    setSavingCompanyLocation(true);
+  // Solicita a permissão de localização e obtém a posição atual do dispositivo
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error("Permita o acesso à localização para continuar.");
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      // Envia a latitude e longitutde atuais para o Backend para atualizar a localização da empresa no banco de dados
+      const response = await authenticatedFetch(`/company/${companyLocation.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(body.message || "Não foi possível salvar a localização.");
+      }
+
+      // Atualiza o estado local com a Localização
+      setCompanyLocation(body.data);
+      Alert.alert("Localização salva", "A localização da empresa foi atualizada.");
+    } catch (error) {
+      Alert.alert(
+        "Erro",
+        error instanceof Error ? error.message : "Não foi possível obter o GPS.",
+      );
+    } finally {
+      setSavingCompanyLocation(false);
+    }
+  };
+  // Verifica se está definida a loc da empresa
+  const companyLocationIsSet = companyLocation?.latitude !== null
+    && companyLocation?.latitude !== undefined
+    && companyLocation?.longitude !== null
+    && companyLocation?.longitude !== undefined;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -158,6 +229,19 @@ export default function PerfilAdm() {
 
         {/* FERRAMENTAS DO COLABORADOR */}
         <Text style={styles.sectionTitle}>ferramentas & gestão</Text>
+
+        {/* Botão para definir a localização da empresa */}
+        <PerfilAction
+          icon="location-outline"
+          text={savingCompanyLocation ? "salvando localização..." : "definir localização da empresa"}
+          onPress={handleSaveCompanyLocation}
+          showAdd={false}
+        />
+        <Text style={styles.locationHint}>
+          {companyLocationIsSet
+            ? `Local salvo: ${Number(companyLocation?.latitude).toFixed(5)}, ${Number(companyLocation?.longitude).toFixed(5)}`
+            : "Defina o local presencialmente na empresa. O ponto aceita até 50 metros de distância."}
+        </Text>
 
         <PerfilAction
           icon="calendar-outline"
@@ -258,5 +342,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  locationHint: {
+    marginHorizontal: 24,
+    marginTop: -4,
+    marginBottom: 14,
+    fontSize: 12,
+    color: "#64748B",
   },
 });
