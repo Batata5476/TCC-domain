@@ -32,7 +32,10 @@ INSERT INTO permissao (nome, descricao) VALUES
   ('work.delete', 'Remover jornada')
 ON CONFLICT (nome) DO NOTHING;
 
-INSERT INTO role (nome) VALUES ('Administrador')
+INSERT INTO role (nome) VALUES
+  ('Administrador Master'),
+  ('Administrador'),
+  ('Funcionário')
 ON CONFLICT (nome) DO NOTHING;
 
 INSERT INTO role_permissao (role_id, permissao_id)

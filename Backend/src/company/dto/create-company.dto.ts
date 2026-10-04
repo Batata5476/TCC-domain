@@ -1,4 +1,5 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsEmail, IsLatitude, IsLongitude, IsNotEmpty, IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateCompanyDto {
   @IsString()
@@ -15,6 +16,18 @@ export class CreateCompanyDto {
   @IsString()
   @IsOptional()
   tipo_empresa?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsLatitude()
+  @IsOptional()
+  latitude?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsLongitude()
+  @IsOptional()
+  longitude?: number;
 
   @IsString()
   @MinLength(8)

@@ -1,11 +1,16 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateWorkDto } from './dto/create-work.dto';
 import { UpdateWorkDto } from './dto/update-work.dto';
 import { Work } from './entities/work.entity';
 import { User } from '../users/entities/user.entity';
-import { isAdminRole, ROLES } from '../auth/authorization.constants';
+import { Company } from '../company/entities/company.entity';
+import { isAdminRole, isEmployeeRole } from '../auth/authorization.constants';
+import { isPointWithinRadius } from 'geolib';
+
+// Distância máxima entre a posição do funcionário e a localização cadastrada da empresa.
+const MAX_WORK_DISTANCE_METERS = 50;
 
 @Injectable()
 export class WorkService {
@@ -14,6 +19,8 @@ export class WorkService {
     private readonly workRepository: Repository<Work>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Company)
+    private readonly companyRepository: Repository<Company>,
   ) {}
 
   private async validateWorkAccess(workId: number, caller: any): Promise<Work> {
@@ -104,12 +111,51 @@ export class WorkService {
     return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
   }
 
+  private async validateCompanyLocation(employeeId: number, latitude: number, longitude: number) {
+    // Busca a empresa do funcionário para comparar as duas posições.
+    const employee = await this.userRepository.findOne({ where: { id: employeeId } });
+    if (!employee) {
+      throw new NotFoundException('Funcionario nao encontrado');
+    }
+
+    const company = await this.companyRepository.findOne({
+      where: { id: employee.empresa_id },
+    });
+    if (!company || company.latitude === null || company.latitude === undefined || company.longitude === null || company.longitude === undefined) {
+      throw new BadRequestException('A localizacao da empresa ainda nao foi configurada');
+    }
+
+    // O banco pode devolver coordenadas NUMERIC como texto; converte antes da comparação em metros.
+    const withinCompanyRadius = isPointWithinRadius(
+      { latitude, longitude },
+      {
+        latitude: Number(company.latitude),
+        longitude: Number(company.longitude),
+      },
+      MAX_WORK_DISTANCE_METERS,
+    );
+
+    if (!withinCompanyRadius) {
+      throw new ForbiddenException(`Registro de ponto permitido somente a ate ${MAX_WORK_DISTANCE_METERS} metros da empresa`);
+    }
+  }
+
   async create(createWorkDto: CreateWorkDto, caller: any) {
-    if (caller.role !== ROLES.EMPLOYEE) {
-      throw new ForbiddenException('Apenas funcionarios podem criar registros de ponto');
+    if (!isEmployeeRole(caller.role)) {
+      throw new ForbiddenException(`Apenas funcionarios podem criar registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
     }
 
     const callerId = caller.sub;
+    const existingWork = await this.workRepository.findOne({
+      where: { fk_id_func: callerId, data_ponto: new Date(createWorkDto.data_ponto) },
+    });
+    if (existingWork) {
+      throw new ConflictException('Ja existe um registro de ponto para este dia');
+    }
+
+    // Bloqueia a gravação se a entrada foi registrada fora do raio da empresa.
+    await this.validateCompanyLocation(callerId, createWorkDto.latitude, createWorkDto.longitude);
+
     const totalDia = this.calculateTotalDia(createWorkDto.entrada, createWorkDto.saida);
 
     const work = this.workRepository.create({
@@ -118,6 +164,9 @@ export class WorkService {
       data_ponto: new Date(createWorkDto.data_ponto),
       total_dia: totalDia,
       fk_id_func: callerId,
+      // Guarda no registro a posição em que a entrada foi feita.
+      latitude_registro: createWorkDto.latitude,
+      longitude_registro: createWorkDto.longitude,
     });
 
     const saved = await this.workRepository.save(work);
@@ -130,11 +179,22 @@ export class WorkService {
   }
 
   async update(id: number, updateDto: UpdateWorkDto, caller: any) {
-    if (caller.role !== ROLES.EMPLOYEE) {
-      throw new ForbiddenException('Apenas funcionarios podem atualizar seus registros de ponto');
+    if (!isEmployeeRole(caller.role)) {
+      throw new ForbiddenException(`Apenas funcionarios podem atualizar seus registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
     }
 
     const work = await this.validateWorkAccess(id, caller);
+
+    if (updateDto.saida !== undefined) {
+      // Para registrar a saída, exige e valida novamente a posição atual do funcionário.
+      if (updateDto.latitude === undefined || updateDto.longitude === undefined) {
+        throw new BadRequestException('A localizacao atual e obrigatoria para registrar a saida');
+      }
+      await this.validateCompanyLocation(caller.sub, updateDto.latitude, updateDto.longitude);
+      // Mantém separadas as coordenadas da entrada e da saída.
+      work.latitude_saida = updateDto.latitude;
+      work.longitude_saida = updateDto.longitude;
+    }
 
     if (updateDto.entrada !== undefined) {
       work.entrada = updateDto.entrada;
@@ -158,8 +218,8 @@ export class WorkService {
   }
 
   async remove(id: number, caller: any) {
-    if (caller.role !== ROLES.EMPLOYEE) {
-      throw new ForbiddenException('Apenas funcionarios podem excluir seus registros de ponto');
+    if (!isEmployeeRole(caller.role)) {
+      throw new ForbiddenException(`Apenas funcionarios podem excluir seus registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
     }
 
     const work = await this.validateWorkAccess(id, caller);

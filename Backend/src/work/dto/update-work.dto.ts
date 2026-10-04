@@ -1,4 +1,5 @@
-import { IsDateString, IsOptional, IsString, Matches } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDateString, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Matches } from 'class-validator';
 
 export class UpdateWorkDto {
   @IsOptional()
@@ -14,4 +15,17 @@ export class UpdateWorkDto {
   @IsOptional()
   @IsDateString()
   data_ponto?: string;
+
+  // As coordenadas são opcionais em outras edições; o service exige ambas ao registrar a saída.
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsLatitude()
+  latitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsLongitude()
+  longitude?: number;
 }

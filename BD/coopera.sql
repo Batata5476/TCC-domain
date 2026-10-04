@@ -8,7 +8,9 @@ CREATE TABLE IF NOT EXISTS empresa (
     cnpj VARCHAR(18) UNIQUE NOT NULL,
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL,
-    tipo_empresa VARCHAR(50)
+    tipo_empresa VARCHAR(50),
+    latitude NUMERIC(10,7),
+    longitude NUMERIC(10,7)
 );
 
 CREATE TABLE IF NOT EXISTS setor (
@@ -96,7 +98,11 @@ CREATE TABLE IF NOT EXISTS entrada_saida (
     saida TIME NOT NULL,
     data_ponto DATE NOT NULL,
     total_dia TIME NOT NULL,
-    fk_id_func INT NOT NULL REFERENCES usuario(id) ON DELETE CASCADE
+    fk_id_func INT NOT NULL REFERENCES usuario(id) ON DELETE CASCADE,
+    latitude_registro NUMERIC(10,7),
+    longitude_registro NUMERIC(10,7),
+    latitude_saida NUMERIC(10,7),
+    longitude_saida NUMERIC(10,7)
 );
 
 CREATE TABLE IF NOT EXISTS humor_func (

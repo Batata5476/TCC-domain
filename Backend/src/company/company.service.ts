@@ -52,7 +52,7 @@ export class CompanyService {
   }
 
   async create(createCompanyDto: CreateCompanyDto) {
-    const { senha_empresa, cnpj, nome, email, tipo_empresa } = createCompanyDto;
+    const { senha_empresa, cnpj, nome, email, tipo_empresa, latitude, longitude } = createCompanyDto;
     const cleanCnpj = cnpj.replace(/\D/g, '');
     const cleanEmail = email.trim().toLowerCase();
 
@@ -86,6 +86,8 @@ export class CompanyService {
         nome: nome.trim(),
         email: cleanEmail,
         tipo_empresa: tipo_empresa?.trim() || null,
+        latitude,
+        longitude,
       });
       const savedCompany = await transactionalEntityManager.save(Company, company);
 
@@ -122,6 +124,9 @@ export class CompanyService {
     if (updateCompanyDto.email !== undefined) cleanedDto.email = updateCompanyDto.email.trim().toLowerCase();
     if (updateCompanyDto.cnpj !== undefined) cleanedDto.cnpj = updateCompanyDto.cnpj.replace(/\D/g, '');
     if (updateCompanyDto.tipo_empresa !== undefined) cleanedDto.tipo_empresa = updateCompanyDto.tipo_empresa.trim();
+    // Salva as coordenadas que o administrador capturou presencialmente pelo GPS.
+    if (updateCompanyDto.latitude !== undefined) cleanedDto.latitude = updateCompanyDto.latitude;
+    if (updateCompanyDto.longitude !== undefined) cleanedDto.longitude = updateCompanyDto.longitude;
 
     await this.companyRepository.update(id, cleanedDto);
     const updated = await this.findOne(id, empresaId);
