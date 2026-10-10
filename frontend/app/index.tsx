@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Modal, ActivityIndicator, Alert, StatusBar, Dimensions, useWindowDimensions, } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Modal, ActivityIndicator, StatusBar, Dimensions, useWindowDimensions, } from "react-native";
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, withSpring, Easing,SharedValue, } from "react-native-reanimated";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useRouter } from "expo-router";
@@ -13,7 +13,8 @@ type ModalStep =
   | "firstAccess_credentials"
   | "firstAccess_password"
   | "forgotPassword_email"
-  | "forgotPassword_reset";
+  | "forgotPassword_reset"
+  | "feedback";
 
   // Particulas
 const particleData = [
@@ -281,6 +282,11 @@ export default function LoginScreen() {
   const [senhaVisible, setSenhaVisible] = useState(false);
 
   const [modalStep, setModalStep] = useState<ModalStep>("none");
+  const [feedback, setFeedback] = useState<{
+    title: string;
+    message: string;
+    onClose?: () => void;
+  } | null>(null);
 
   const [faCode, setFaCode] = useState("");
   const [faToken, setFaToken] = useState("");
@@ -311,6 +317,7 @@ export default function LoginScreen() {
 
   const closeModal = () => {
     setModalStep("none");
+    setFeedback(null);
     setFaCode("");
     setFaToken("");
     setFaNovaSenha("");
@@ -322,9 +329,21 @@ export default function LoginScreen() {
     setFpConfirmaSenha("");
   };
 
+  const showFeedback = (title: string, message: string, onClose?: () => void) => {
+    setFeedback({ title, message, onClose });
+    setModalStep("feedback");
+  };
+
+  const closeFeedback = () => {
+    const onClose = feedback?.onClose;
+    setFeedback(null);
+    setModalStep("none");
+    onClose?.();
+  };
+
   const handleLogin = async () => {
     if (!loginInput.trim() || !senha) {
-      Alert.alert("Atenção", "Preencha o ID e a senha.");
+      showFeedback("Atenção", "Preencha o ID e a senha.");
       return;
     }
     setLoading(true);
@@ -335,7 +354,7 @@ export default function LoginScreen() {
       if (err.message === "PRIMEIRO_ACESSO_REQUERIDO") {
         setModalStep("firstAccess_credentials");
       } else {
-        Alert.alert("Erro", err.message || "Não foi possível fazer login.");
+        showFeedback("Erro no login", err.message || "Não foi possível fazer login.");
       }
     } finally {
       setLoading(false);
@@ -344,7 +363,7 @@ export default function LoginScreen() {
 
   const handleValidateFirstAccess = async () => {
     if (!faCode.trim() || !faToken.trim()) {
-      Alert.alert("Atenção", "Preencha o Código de Ativação e o Token.");
+      showFeedback("Atenção", "Preencha o Código de Ativação e o Token.");
       return;
     }
     setFaLoading(true);
@@ -352,7 +371,7 @@ export default function LoginScreen() {
       await validateFirstAccess(faCode.trim().toUpperCase(), faToken.trim().toUpperCase());
       setModalStep("firstAccess_password");
     } catch (err: any) {
-      Alert.alert("Inválido", err.message || "Código ou token incorreto.");
+      showFeedback("Dados inválidos", err.message || "Código ou token incorreto.");
     } finally {
       setFaLoading(false);
     }
@@ -361,11 +380,11 @@ export default function LoginScreen() {
   const handleActivateFirstAccess = async () => {
     const err = validatePassword(faNovaSenha);
     if (err) {
-      Alert.alert("Senha fraca", err);
+      showFeedback("Senha fraca", err);
       return;
     }
     if (faNovaSenha !== faConfirmaSenha) {
-      Alert.alert("Atenção", "As senhas não coincidem.");
+      showFeedback("Atenção", "As senhas não coincidem.");
       return;
     }
     setFaLoading(true);
@@ -374,7 +393,7 @@ export default function LoginScreen() {
       closeModal();
       router.replace("/dashboard");
     } catch (err: any) {
-      Alert.alert("Erro", err.message || "Não foi possível ativar a conta.");
+      showFeedback("Erro", err.message || "Não foi possível ativar a conta.");
     } finally {
       setFaLoading(false);
     }
@@ -382,17 +401,17 @@ export default function LoginScreen() {
 
   const handleForgotPasswordEmail = async () => {
     if (!fpEmail.trim()) {
-      Alert.alert("Atenção", "Informe seu e-mail.");
+      showFeedback("Atenção", "Informe seu e-mail.");
       return;
     }
     setFpLoading(true);
     try {
       await forgotPassword(fpEmail.trim());
-      Alert.alert("Instruções enviadas", "Verifique seu e-mail.", [
-        { text: "OK", onPress: () => setModalStep("forgotPassword_reset") },
-      ]);
+      showFeedback("Instruções enviadas", "Verifique seu e-mail.", () =>
+        setModalStep("forgotPassword_reset"),
+      );
     } catch (err: any) {
-      Alert.alert("Erro", err.message || "Erro ao solicitar redefinição.");
+      showFeedback("Erro", err.message || "Erro ao solicitar redefinição.");
     } finally {
       setFpLoading(false);
     }
@@ -400,25 +419,25 @@ export default function LoginScreen() {
 
   const handleResetPassword = async () => {
     if (!fpCode.trim() || !fpToken.trim()) {
-      Alert.alert("Atenção", "Preencha o código e o token.");
+      showFeedback("Atenção", "Preencha o código e o token.");
       return;
     }
     const err = validatePassword(fpNovaSenha);
     if (err) {
-      Alert.alert("Senha fraca", err);
+      showFeedback("Senha fraca", err);
       return;
     }
     if (fpNovaSenha !== fpConfirmaSenha) {
-      Alert.alert("Atenção", "As senhas não coincidem.");
+      showFeedback("Atenção", "As senhas não coincidem.");
       return;
     }
     setFpLoading(true);
     try {
       await activateFirstAccess(fpCode.trim().toUpperCase(), fpToken.trim().toUpperCase(), fpNovaSenha);
       closeModal();
-      Alert.alert("Sucesso", "Senha redefinida! Faça login com a nova senha.");
+      showFeedback("Sucesso", "Senha redefinida! Faça login com a nova senha.");
     } catch (err: any) {
-      Alert.alert("Erro", err.message || "Não foi possível redefinir a senha.");
+      showFeedback("Erro", err.message || "Não foi possível redefinir a senha.");
     } finally {
       setFpLoading(false);
     }
@@ -426,6 +445,16 @@ export default function LoginScreen() {
 
   const renderModal = () => {
     switch (modalStep) {
+      case "feedback":
+        return (
+          <>
+            <Text style={ms.title}>{feedback?.title}</Text>
+            <Text style={ms.subtitle}>{feedback?.message}</Text>
+            <TouchableOpacity style={ms.primaryBtn} onPress={closeFeedback}>
+              <Text style={ms.primaryBtnText}>Entendi</Text>
+            </TouchableOpacity>
+          </>
+        );
       case "firstAccess_credentials":
         return (
           <>

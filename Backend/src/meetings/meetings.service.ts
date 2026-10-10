@@ -114,6 +114,7 @@ export class MeetingsService {
         data_reuniao: new Date(createDto.data_reuniao),
         horario_reuniao: createDto.horario_reuniao,
         assunto_reuniao: createDto.assunto_reuniao,
+        link_reuniao: createDto.link_reuniao || null,
         tipo_reuniao: createDto.tipo_reuniao,
         status_reuniao: 'PENDENTE',
         solicitante_id: callerId,
@@ -162,6 +163,7 @@ export class MeetingsService {
         data_reuniao: new Date(createMeetingDto.data_reuniao),
         horario_reuniao: createMeetingDto.horario_reuniao,
         assunto_reuniao: createMeetingDto.assunto_reuniao,
+        link_reuniao: createMeetingDto.link_reuniao || null,
         tipo_reuniao: createMeetingDto.tipo_reuniao,
         status_reuniao: 'AGENDADA',
         solicitante_id: caller.sub,
@@ -196,13 +198,25 @@ export class MeetingsService {
     const newStatus = updateStatusDto.status_reuniao;
 
     // Se for funcionário que não é admin
-    if (!isCompanyAdmin) {
+    if (!isCompanyAdmin && newStatus === 'CANCELADA') {
       if (!isRequester) {
         throw new ForbiddenException('Apenas o solicitante da reunião pode alterar seu status');
       }
-      if (newStatus !== 'CANCELADA') {
-        throw new ForbiddenException('Funcionários só podem cancelar suas próprias solicitações');
+    } else if (newStatus === 'CONCLUIDA') {
+      if (meeting.status_reuniao !== 'AGENDADA') {
+        throw new BadRequestException('Apenas reuniões agendadas podem ser concluídas');
       }
+
+      if (!isCompanyAdmin) {
+        const isParticipant = await this.meetingParticipantRepository.findOne({
+          where: { fk_id_reuniao: id, fk_id_func: caller.sub },
+        });
+        if (!isParticipant) {
+          throw new ForbiddenException('Apenas participantes podem concluir esta reunião');
+        }
+      }
+    } else if (!isCompanyAdmin) {
+      throw new ForbiddenException('Funcionários só podem cancelar suas solicitações ou concluir reuniões das quais participam');
     }
 
     meeting.status_reuniao = newStatus;
@@ -316,6 +330,9 @@ export class MeetingsService {
     }
     if (updateDto.assunto_reuniao !== undefined) {
       meeting.assunto_reuniao = updateDto.assunto_reuniao;
+    }
+    if (updateDto.link_reuniao !== undefined) {
+      meeting.link_reuniao = updateDto.link_reuniao || null;
     }
     if (updateDto.tipo_reuniao !== undefined) {
       meeting.tipo_reuniao = updateDto.tipo_reuniao;

@@ -226,5 +226,47 @@ describe('MeetingsService', () => {
       expect(result.status).toBe('success');
       expect(result.data.status_reuniao).toBe('CANCELADA');
     });
+
+    it('should allow a participant to complete an agendada meeting', async () => {
+      const mockMeeting = {
+        pk_id_reuniao: 50,
+        solicitante_id: 1,
+        status_reuniao: 'AGENDADA',
+        solicitante: { empresa_id: 1 },
+      };
+      meetingRepository.findOne.mockResolvedValue(mockMeeting);
+      meetingParticipantRepository.find.mockResolvedValue([
+        { fk_id_func: 10, funcionario: { empresa_id: 1 } },
+      ]);
+      meetingParticipantRepository.findOne.mockResolvedValue({ fk_id_func: 10 });
+      meetingRepository.save.mockImplementation((m) => Promise.resolve(m));
+
+      const result = await service.updateStatus(
+        50,
+        { status_reuniao: 'CONCLUIDA' },
+        mockCallerUser,
+      );
+
+      expect(result.status).toBe('success');
+      expect(result.data.status_reuniao).toBe('CONCLUIDA');
+    });
+
+    it('should reject completing a meeting that is not scheduled', async () => {
+      meetingRepository.findOne.mockResolvedValue({
+        pk_id_reuniao: 50,
+        solicitante_id: 10,
+        status_reuniao: 'PENDENTE',
+        solicitante: { empresa_id: 1 },
+      });
+      meetingParticipantRepository.find.mockResolvedValue([]);
+
+      await expect(
+        service.updateStatus(
+          50,
+          { status_reuniao: 'CONCLUIDA' },
+          mockCallerUser,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 });

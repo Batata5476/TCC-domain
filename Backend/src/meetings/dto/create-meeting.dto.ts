@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsArray, IsInt, IsOptional, Matches } from 'class-validator';
+import { IsString, IsDateString, IsArray, IsInt, IsOptional, Matches, IsUrl } from 'class-validator';
 
 export class CreateMeetingDto {
   @IsDateString()
@@ -12,6 +12,10 @@ export class CreateMeetingDto {
 
   @IsString()
   assunto_reuniao: string;
+
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  link_reuniao?: string;
 
   @IsString()
   tipo_reuniao: string;

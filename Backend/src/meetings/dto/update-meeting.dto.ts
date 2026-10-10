@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsArray, IsInt, IsOptional, ArrayNotEmpty } from 'class-validator';
+import { IsString, IsDateString, IsArray, IsInt, IsOptional, ArrayNotEmpty, IsUrl } from 'class-validator';
 
 export class UpdateMeetingDto {
   @IsOptional()
@@ -12,6 +12,10 @@ export class UpdateMeetingDto {
   @IsOptional()
   @IsString()
   assunto_reuniao?: string;
+
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  link_reuniao?: string;
 
   @IsOptional()
   @IsString()

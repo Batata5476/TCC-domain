@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
   SafeAreaView,
@@ -63,6 +64,7 @@ type MeetingItem = {
   assunto_reuniao: string;
   tipo_reuniao: string;
   status_reuniao: string;
+  link_reuniao?: string | null;
   solicitante_id?: number;
   solicitante?: { id: number; nome: string };
 };
@@ -98,11 +100,13 @@ export default function Dashboard() {
   // Estados de reuniões
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [meetingModalVisible, setMeetingModalVisible] = useState(false);
+  const [meetingsCompletedOpen, setMeetingsCompletedOpen] = useState(true);
 
   // Modal de sucesso da reunião
   const [meetingSuccessVisible, setMeetingSuccessVisible] = useState(false);
 
   const [meetingSubject, setMeetingSubject] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
   const [meetingDate, setMeetingDate] = useState(
     () => new Date().toISOString().split("T")[0]
   );
@@ -110,6 +114,8 @@ export default function Dashboard() {
   const [selectedMeetingEmployeeIds, setSelectedMeetingEmployeeIds] =
     useState<number[]>([]);
   const [creatingMeeting, setCreatingMeeting] = useState(false);
+  const [updatingMeetingId, setUpdatingMeetingId] = useState<number | null>(null);
+  const [meetingError, setMeetingError] = useState("");
 
   // Datas dinâmicas
   const [datesList, setDatesList] = useState<
@@ -123,6 +129,8 @@ export default function Dashboard() {
   // Modal de criação de tarefa
   const [taskModalVisible, setTaskModalVisible] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
+  const [taskError, setTaskError] = useState("");
+  const [creatingTask, setCreatingTask] = useState(false);
   const [taskPriority, setTaskPriority] = useState(2);
   const [taskDueDate, setTaskDueDate] = useState<
     "hoje" | "amanha" | "semana"
@@ -398,12 +406,12 @@ export default function Dashboard() {
 
   const handleCreateTask = async () => {
     if (!taskTitle.trim()) {
-      Alert.alert("Erro", "Por favor, preencha o título da tarefa.");
+      setTaskError("Por favor, preencha o título da tarefa.");
       return;
     }
 
     if (userType === "company" && !selectedEmployeeId) {
-      Alert.alert("Erro", "Por favor, selecione um colaborador.");
+      setTaskError("Por favor, selecione um colaborador.");
       return;
     }
 
@@ -420,6 +428,9 @@ export default function Dashboard() {
     const day = String(dueDate.getDate()).padStart(2, "0");
 
     const dateStringLocal = `${year}-${month}-${day}`;
+
+    setTaskError("");
+    setCreatingTask(true);
 
     try {
       const body: any = {
@@ -440,23 +451,22 @@ export default function Dashboard() {
       });
 
       if (response.ok) {
-        Alert.alert("Sucesso", "Tarefa criada com sucesso!");
-
         setTaskModalVisible(false);
         setTaskTitle("");
+        setTaskError("");
         setSelectedEmployeeId(null);
         setMenuOpen(false);
 
-        fetchDashboard();
+        await fetchDashboard();
       } else {
-        const err = await response.json();
-
-        Alert.alert("Erro", err.message || "Erro ao criar tarefa.");
+        const err = await response.json().catch(() => ({}));
+        setTaskError(err.message || "Erro ao criar tarefa.");
       }
     } catch (e) {
       console.error(e);
-
-      Alert.alert("Erro", "Não foi possível cadastrar a tarefa.");
+      setTaskError("Não foi possível cadastrar a tarefa. Verifique sua conexão e tente novamente.");
+    } finally {
+      setCreatingTask(false);
     }
   };
 
@@ -464,26 +474,33 @@ export default function Dashboard() {
 
   const handleCreateMeeting = async () => {
     if (!meetingSubject.trim()) {
-      Alert.alert("Erro", "Por favor, informe o assunto da reunião.");
+      setMeetingError("Por favor, informe o assunto da reunião.");
       return;
     }
 
-    if (selectedMeetingEmployeeIds.length === 0) {
-      Alert.alert("Erro", "Por favor, selecione ao menos um participante.");
+    const isCompany = userType === "company";
+    if (isCompany && selectedMeetingEmployeeIds.length === 0) {
+      setMeetingError("Por favor, selecione ao menos um participante.");
       return;
     }
 
+    setMeetingError("");
     try {
       setCreatingMeeting(true);
 
-      const response = await authenticatedFetch("/meetings", {
+      const response = await authenticatedFetch(isCompany ? "/meetings" : "/meetings/request", {
         method: "POST",
         body: JSON.stringify({
           data_reuniao: meetingDate,
           horario_reuniao: meetingTime,
           assunto_reuniao: meetingSubject.trim(),
+          link_reuniao: meetingLink.trim()
+            ? /^https?:\/\//i.test(meetingLink.trim())
+              ? meetingLink.trim()
+              : `https://${meetingLink.trim()}`
+            : undefined,
           tipo_reuniao: "empresarial",
-          participants: selectedMeetingEmployeeIds,
+          participants: isCompany ? selectedMeetingEmployeeIds : [],
         }),
       });
 
@@ -496,29 +513,65 @@ export default function Dashboard() {
 
         // Limpa os campos
         setMeetingSubject("");
+        setMeetingLink("");
+        setMeetingError("");
         setSelectedMeetingEmployeeIds([]);
 
         setMenuOpen(false);
 
         // Atualiza a lista de reuniões
-        fetchDashboard();
+        await fetchDashboard();
       } else {
         const err = await response.json().catch(() => ({}));
-
-        Alert.alert(
-          "Reunião não realizada ⚠️",
-          err.message || "Erro ao agendar reunião."
-        );
+        setMeetingError(err.message || "Erro ao registrar a reunião.");
       }
     } catch (e) {
       console.error(e);
-
-      Alert.alert(
-        "Reunião não realizada ⚠️",
-        "Não foi possível conectar ao servidor."
-      );
+      setMeetingError("Não foi possível conectar ao servidor. Tente novamente.");
     } finally {
       setCreatingMeeting(false);
+    }
+  };
+
+  const handleUpdateMeetingStatus = async (meeting: MeetingItem) => {
+    if (updatingMeetingId !== null) return;
+
+    setUpdatingMeetingId(meeting.pk_id_reuniao);
+    try {
+      const response = await authenticatedFetch(
+        `/meetings/${meeting.pk_id_reuniao}/status`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status_reuniao: "CONCLUIDA" }),
+        },
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.message || "Não foi possível concluir a reunião.");
+      }
+
+      setMeetings((current) =>
+        current.map((item) =>
+          item.pk_id_reuniao === meeting.pk_id_reuniao
+            ? { ...item, status_reuniao: "CONCLUIDA" }
+            : item,
+        ),
+      );
+    } catch (error) {
+      Alert.alert(
+        "Erro",
+        error instanceof Error ? error.message : "Não foi possível concluir a reunião.",
+      );
+    } finally {
+      setUpdatingMeetingId(null);
+    }
+  };
+
+  const openMeetingLink = async (link: string) => {
+    try {
+      await Linking.openURL(link);
+    } catch {
+      Alert.alert("Link inválido", "Não foi possível abrir o link da reunião.");
     }
   };
 
@@ -563,6 +616,8 @@ export default function Dashboard() {
   });
 
   const completedTasks = tasks.filter((t) => t.status === 1);
+  const openMeetings = meetings.filter((meeting) => meeting.status_reuniao !== "CONCLUIDA");
+  const completedMeetings = meetings.filter((meeting) => meeting.status_reuniao === "CONCLUIDA");
 
   // ─── Renderização de item de tarefa ────────────────────────────────────────
 
@@ -707,6 +762,99 @@ export default function Dashboard() {
               />
             </TouchableOpacity>
           )}
+        </View>
+      </View>
+    );
+  };
+
+  const renderMeeting = (meeting: MeetingItem) => {
+    const rawDate =
+      typeof meeting.data_reuniao === "string" && meeting.data_reuniao.includes("T")
+        ? meeting.data_reuniao.split("T")[0]
+        : String(meeting.data_reuniao);
+    const isCompleted = meeting.status_reuniao === "CONCLUIDA";
+    const isScheduled = meeting.status_reuniao === "AGENDADA";
+    const isPending = meeting.status_reuniao === "PENDENTE";
+    const statusColor = isCompleted
+      ? "#059669"
+      : isScheduled
+        ? "#059669"
+        : isPending
+          ? "#D97706"
+          : "#DC2626";
+
+    return (
+      <View key={meeting.pk_id_reuniao} style={styles.taskItem}>
+        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+        <View style={[styles.avatar, { backgroundColor: "#E2E8F0" }]}>
+          <Ionicons name="calendar" size={18} color="#285A71" />
+        </View>
+
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            style={[
+              styles.taskName,
+              isCompleted && { textDecorationLine: "line-through", color: "#64748B" },
+            ]}
+          >
+            {meeting.assunto_reuniao}
+          </Text>
+          <Text style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+            {rawDate} às {meeting.horario_reuniao?.substring(0, 5) || "--:--"}
+            {meeting.solicitante?.nome ? ` • ${meeting.solicitante.nome}` : ""}
+          </Text>
+          {meeting.link_reuniao ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => openMeetingLink(meeting.link_reuniao!)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 }}
+            >
+              <Ionicons name="link-outline" size={15} color="#285A71" />
+              <Text style={{ color: "#285A71", fontSize: 12, fontWeight: "700" }}>
+                Acessar link
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <View style={{ alignItems: "flex-end", gap: 6 }}>
+          <View
+            style={{
+              backgroundColor: isCompleted
+                ? "#D1FAE5"
+                : isScheduled
+                  ? "#D1FAE5"
+                  : isPending
+                    ? "#FEF3C7"
+                    : "#FEE2E2",
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+            }}
+          >
+            <Text style={{ fontSize: 10, fontWeight: "700", color: statusColor }}>
+              {meeting.status_reuniao || "AGENDADA"}
+            </Text>
+          </View>
+          {isScheduled && !isCompleted ? (
+            <TouchableOpacity
+              style={[styles.checkButton, { backgroundColor: "#10B981" }]}
+              activeOpacity={0.8}
+              disabled={updatingMeetingId !== null}
+              onPress={() => handleUpdateMeetingStatus(meeting)}
+              accessibilityLabel="Marcar reunião como concluída"
+            >
+              {updatingMeetingId === meeting.pk_id_reuniao ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          ) : isCompleted ? (
+            <View style={[styles.checkButton, { backgroundColor: "#D1FAE5" }]}>
+              <Ionicons name="checkmark-done" size={18} color="#059669" />
+            </View>
+          ) : null}
         </View>
       </View>
     );
@@ -1025,153 +1173,52 @@ export default function Dashboard() {
         {/* ═══════════════════════════════════════════════════════════════ */}
 
         {activeTab === "Reuniões" && (
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>
-                Reuniões Agendadas
-              </Text>
+          <>
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Reuniões em aberto</Text>
+                <Ionicons name="calendar-outline" size={24} color="#285A71" />
+              </View>
 
-              <Ionicons
-                name="calendar-outline"
-                size={24}
-                color="#285A71"
-              />
+              <View style={styles.taskList}>
+                {loading && meetings.length === 0 ? (
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator size="small" color="#285A71" />
+                    <Text style={styles.loadingLabel}>Carregando reuniões...</Text>
+                  </View>
+                ) : openMeetings.length === 0 ? (
+                  <Text style={styles.emptyText}>Nenhuma reunião em aberto.</Text>
+                ) : (
+                  openMeetings.map(renderMeeting)
+                )}
+              </View>
             </View>
 
-            <View style={styles.taskList}>
-              {loading && meetings.length === 0 ? (
-                <View style={styles.loadingRow}>
-                  <ActivityIndicator
-                    size="small"
-                    color="#285A71"
-                  />
+            <View style={[styles.card, styles.cardSpacing]}>
+              <TouchableOpacity
+                style={styles.cardHeader}
+                onPress={() => setMeetingsCompletedOpen(!meetingsCompletedOpen)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cardTitle}>Reuniões concluídas</Text>
+                <Ionicons
+                  name={meetingsCompletedOpen ? "chevron-up" : "chevron-down"}
+                  size={24}
+                  color="#285A71"
+                />
+              </TouchableOpacity>
 
-                  <Text style={styles.loadingLabel}>
-                    Carregando reuniões...
-                  </Text>
+              {meetingsCompletedOpen && (
+                <View style={styles.taskList}>
+                  {completedMeetings.length === 0 ? (
+                    <Text style={styles.emptyText}>Nenhuma reunião concluída.</Text>
+                  ) : (
+                    completedMeetings.map(renderMeeting)
+                  )}
                 </View>
-              ) : meetings.length === 0 ? (
-                <View style={styles.emptyMeetingBox}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={42}
-                    color="#94A3B8"
-                  />
-
-                  <Text style={styles.emptyMeetingTitle}>
-                    Nenhuma reunião cadastrada
-                  </Text>
-
-                  <Text style={styles.emptyMeetingText}>
-                    As reuniões da empresa aparecerão aqui.
-                  </Text>
-                </View>
-              ) : (
-                meetings.map((m) => {
-                  const rawDate =
-                    typeof m.data_reuniao === "string" &&
-                    m.data_reuniao.includes("T")
-                      ? m.data_reuniao.split("T")[0]
-                      : String(m.data_reuniao);
-
-                  const isScheduled =
-                    m.status_reuniao === "AGENDADA";
-
-                  const isPending =
-                    m.status_reuniao === "PENDENTE";
-
-                  return (
-                    <View
-                      key={m.pk_id_reuniao}
-                      style={styles.taskItem}
-                    >
-                      <View
-                        style={[
-                          styles.statusDot,
-                          isScheduled
-                            ? {
-                                backgroundColor: "#10B981",
-                              }
-                            : isPending
-                            ? {
-                                backgroundColor: "#D97706",
-                              }
-                            : {
-                                backgroundColor: "#EF4444",
-                              },
-                        ]}
-                      />
-
-                      <View
-                        style={[
-                          styles.avatar,
-                          {
-                            backgroundColor: "#E2E8F0",
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name="calendar"
-                          size={18}
-                          color="#285A71"
-                        />
-                      </View>
-
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.taskName}>
-                          {m.assunto_reuniao}
-                        </Text>
-
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: "#64748B",
-                            marginTop: 2,
-                          }}
-                        >
-                          {rawDate} às{" "}
-                          {m.horario_reuniao
-                            ? m.horario_reuniao.substring(0, 5)
-                            : "--:--"}
-                          {m.solicitante?.nome
-                            ? ` • ${m.solicitante.nome}`
-                            : ""}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={{
-                          backgroundColor: isScheduled
-                            ? "#D1FAE5"
-                            : isPending
-                            ? "#FEF3C7"
-                            : "#FEE2E2",
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          borderRadius: 6,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: "700",
-                            color: isScheduled
-                              ? "#059669"
-                              : isPending
-                              ? "#D97706"
-                              : "#DC2626",
-                          }}
-                        >
-                          {m.status_reuniao ||
-                            "AGENDADA"}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })
               )}
             </View>
-          </View>
+          </>
         )}
 
         <View style={{ height: 120 }} />
@@ -1200,7 +1247,7 @@ export default function Dashboard() {
             </Text>
           </TouchableOpacity>
 
-          {userType === "company" && (
+          {(userType === "company" || userType === "user") && (
             <TouchableOpacity
               style={[
                 styles.menuCard,
@@ -1219,7 +1266,7 @@ export default function Dashboard() {
               />
 
               <Text style={styles.menuText}>
-                Reunião
+                {userType === "company" ? "Reunião" : "Solicitar reunião"}
               </Text>
             </TouchableOpacity>
           )}
@@ -1254,6 +1301,7 @@ export default function Dashboard() {
         <TouchableOpacity
           style={styles.navButton}
           activeOpacity={0.8}
+          onPress={() => router.replace("/dashboard")}
         >
           <Ionicons
             name="home"
@@ -1772,6 +1820,12 @@ export default function Dashboard() {
               onChangeText={setTaskTitle}
             />
 
+            {taskError ? (
+              <Text style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>
+                {taskError}
+              </Text>
+            ) : null}
+
             <Text style={styles.inputLabel}>
               Prioridade
             </Text>
@@ -1921,12 +1975,15 @@ export default function Dashboard() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.saveBtn}
+                style={[styles.saveBtn, creatingTask && { opacity: 0.6 }]}
                 onPress={handleCreateTask}
+                disabled={creatingTask}
               >
-                <Text style={styles.saveBtnText}>
-                  Criar Tarefa
-                </Text>
+                {creatingTask ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Criar Tarefa</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1947,7 +2004,7 @@ export default function Dashboard() {
           <View style={styles.taskModal}>
             <View style={styles.accountModalHeader}>
               <Text style={styles.accountModalTitle}>
-                Nova Reunião
+                {userType === "company" ? "Nova Reunião" : "Solicitar Reunião"}
               </Text>
 
               <TouchableOpacity
@@ -1972,7 +2029,10 @@ export default function Dashboard() {
               placeholder="Ex: Alinhamento Estratégico do Trimestre"
               placeholderTextColor="#94A3B8"
               value={meetingSubject}
-              onChangeText={setMeetingSubject}
+              onChangeText={(value) => {
+                setMeetingSubject(value);
+                setMeetingError("");
+              }}
             />
 
             <View
@@ -2010,11 +2070,32 @@ export default function Dashboard() {
               </View>
             </View>
 
-            <Text style={styles.inputLabel}>
-              Convidar Participantes
-            </Text>
+            <Text style={styles.inputLabel}>Link da reunião (opcional)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="https://meet.google.com/..."
+              placeholderTextColor="#94A3B8"
+              value={meetingLink}
+              onChangeText={(value) => {
+                setMeetingLink(value);
+                setMeetingError("");
+              }}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
 
-            <ScrollView
+            {meetingError ? (
+              <Text style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>
+                {meetingError}
+              </Text>
+            ) : null}
+
+            {userType === "company" ? (
+              <Text style={styles.inputLabel}>Convidar Participantes</Text>
+            ) : null}
+
+            {userType === "company" ? <ScrollView
               style={styles.employeeList}
               nestedScrollEnabled
             >
@@ -2084,7 +2165,7 @@ export default function Dashboard() {
                   );
                 })
               )}
-            </ScrollView>
+            </ScrollView> : null}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -2116,7 +2197,7 @@ export default function Dashboard() {
                   />
                 ) : (
                   <Text style={styles.saveBtnText}>
-                    Agendar Reunião
+                    {userType === "company" ? "Agendar Reunião" : "Enviar solicitação"}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -2146,11 +2227,13 @@ export default function Dashboard() {
             </View>
 
             <Text style={styles.successTitle}>
-              Reunião agendada!
+              {userType === "company" ? "Reunião agendada!" : "Solicitação enviada!"}
             </Text>
 
             <Text style={styles.successText}>
-              A reunião foi criada com sucesso.
+              {userType === "company"
+                ? "A reunião foi criada com sucesso."
+                : "Sua solicitação foi enviada para a administração."}
             </Text>
 
             <TouchableOpacity

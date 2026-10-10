@@ -15,6 +15,9 @@ export class Meeting {
   @Column({ length: 100 })
   assunto_reuniao: string;
 
+  @Column({ type: 'text', nullable: true })
+  link_reuniao: string | null;
+
   @Column({ length: 30 })
   tipo_reuniao: string;
 

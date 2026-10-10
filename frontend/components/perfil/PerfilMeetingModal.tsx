@@ -32,6 +32,7 @@ export default function PerfilMeetingModal({
 }: PerfilMeetingModalProps) {
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [time, setTime] = useState("14:00");
+  const [meetingLink, setMeetingLink] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
@@ -71,6 +72,7 @@ export default function PerfilMeetingModal({
       setSubmitting(true);
       const isCompany = userTypeState === "company";
       const endpoint = isCompany ? "/meetings" : "/meetings/request";
+      const trimmedLink = meetingLink.trim();
 
       const res = await authenticatedFetch(endpoint, {
         method: "POST",
@@ -78,6 +80,11 @@ export default function PerfilMeetingModal({
           data_reuniao: date,
           horario_reuniao: time,
           assunto_reuniao: subject.trim(),
+          link_reuniao: trimmedLink
+            ? /^https?:\/\//i.test(trimmedLink)
+              ? trimmedLink
+              : `https://${trimmedLink}`
+            : undefined,
           tipo_reuniao: "empresarial",
           participants: selectedParticipantIds,
         }),
@@ -97,6 +104,7 @@ export default function PerfilMeetingModal({
       );
 
       setSubject("");
+      setMeetingLink("");
       setSelectedParticipantIds([]);
       onClose();
       if (onSuccess) onSuccess();
@@ -160,6 +168,23 @@ export default function PerfilMeetingModal({
               onChangeText={setTime}
               placeholder="HH:MM"
               style={styles.optionInput}
+            />
+          </View>
+
+          <View style={styles.subjectArea}>
+            <View style={styles.subjectTitleRow}>
+              <Ionicons name="link-outline" size={20} color="#263238" />
+              <Text style={styles.optionTitle}>link da reunião (opcional)</Text>
+            </View>
+            <TextInput
+              value={meetingLink}
+              onChangeText={setMeetingLink}
+              placeholder="https://meet.google.com/..."
+              placeholderTextColor="#7A7A7A"
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.subjectInput, { height: 44, textAlignVertical: "center" }]}
             />
           </View>
 
