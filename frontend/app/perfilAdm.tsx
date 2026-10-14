@@ -10,7 +10,8 @@ import PerfilInfo from "../components/perfil/PerfilInfo";
 import PerfilMeetingModal from "../components/perfil/PerfilMeetingModal";
 import PerfilMedicalModal from "../components/perfil/PerfilMedicalModal";
 import PerfilPointsModal from "../components/perfil/PerfilPointsModal";
-import PieChartCard from "../components/common/PieChartCard"; 
+import PieChartCard from "../components/common/PieChartCard";
+import EmotionsPieChartCard from "../components/common/EmotionsPieChartCard";
 import { authenticatedFetch } from "../services/api";
 
 type UserProfile = {
@@ -24,10 +25,10 @@ type UserProfile = {
 };
 // Tipo parar armazenar latitude e longitude da empresa de tipo número ou string
 type CompanyLocation = {
-    id: number;
-    latitude: number | string | null;
-    longitude: number | string | null;
-  };
+  id: number;
+  latitude: number | string | null;
+  longitude: number | string | null;
+};
 
 export default function PerfilAdm() {
   const router = useRouter();
@@ -64,10 +65,10 @@ export default function PerfilAdm() {
 
       // Carrega a localização da empresa do usuário logado
       const companyRes = await authenticatedFetch("/company");
-       if (companyRes.ok) {
+      if (companyRes.ok) {
         const companyBody = await companyRes.json();
         setCompanyLocation(companyBody.data?.[0] ?? null);
-       }
+      }
     } catch (err) {
       console.error("Erro ao carregar perfil adm:", err);
     } finally {
@@ -142,7 +143,7 @@ export default function PerfilAdm() {
     }
 
     setSavingCompanyLocation(true);
-  // Solicita a permissão de localização e obtém a posição atual do dispositivo
+    // Solicita a permissão de localização e obtém a posição atual do dispositivo
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
@@ -226,6 +227,9 @@ export default function PerfilAdm() {
           data={taskChartData}
           size={140}
         />
+
+        {/* GRÁFICO DE EMOÇÕES DA EQUIPE (totais agregados) */}
+        <EmotionsPieChartCard />
 
         {/* FERRAMENTAS DO COLABORADOR */}
         <Text style={styles.sectionTitle}>ferramentas & gestão</Text>

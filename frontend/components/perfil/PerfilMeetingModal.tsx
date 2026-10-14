@@ -37,9 +37,11 @@ export default function PerfilMeetingModal({
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [userTypeState, setUserTypeState] = useState<string | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (visible) {
+      setFeedbackMsg(null);
       (async () => {
         const type = await getUserType();
         setUserTypeState(type);
@@ -58,12 +60,16 @@ export default function PerfilMeetingModal({
   }, [visible]);
 
   const handleConfirm = async () => {
+    setFeedbackMsg(null);
+
     if (!subject.trim()) {
+      setFeedbackMsg({ type: "error", text: "Por favor, informe o assunto da reunião." });
       Alert.alert("Reunião não realizada ⚠️", "Por favor, informe o assunto da reunião.");
       return;
     }
 
     if (userTypeState === "company" && selectedParticipantIds.length === 0) {
+      setFeedbackMsg({ type: "error", text: "Por favor, selecione ao menos um participante convidado." });
       Alert.alert("Reunião não realizada ⚠️", "Por favor, selecione ao menos um participante convidado.");
       return;
     }
@@ -96,23 +102,25 @@ export default function PerfilMeetingModal({
         throw new Error(data.message || "Erro ao agendar reunião.");
       }
 
-      Alert.alert(
-        "Reunião marcada com sucesso 🎉",
-        isCompany
-          ? "A reunião foi agendada e os participantes foram notificados!"
-          : "Sua solicitação de reunião foi enviada à administração!"
-      );
+      const successText = isCompany
+        ? "Reunião agendada com sucesso! Participantes notificados."
+        : "Sua solicitação de reunião foi enviada à administração!";
 
-      setSubject("");
-      setMeetingLink("");
-      setSelectedParticipantIds([]);
-      onClose();
-      if (onSuccess) onSuccess();
+      setFeedbackMsg({ type: "success", text: successText });
+      Alert.alert("Reunião marcada com sucesso 🎉", successText);
+
+      setTimeout(() => {
+        setSubject("");
+        setMeetingLink("");
+        setSelectedParticipantIds([]);
+        setFeedbackMsg(null);
+        onClose();
+        if (onSuccess) onSuccess();
+      }, 1200);
     } catch (err: any) {
-      Alert.alert(
-        "Reunião não realizada ⚠️",
-        err.message || "Não foi possível registrar a reunião no sistema."
-      );
+      const errorText = err.message || "Não foi possível registrar a reunião no sistema.";
+      setFeedbackMsg({ type: "error", text: errorText });
+      Alert.alert("Reunião não realizada ⚠️", errorText);
     } finally {
       setSubmitting(false);
     }
@@ -243,6 +251,37 @@ export default function PerfilMeetingModal({
             </View>
           )}
 
+          {feedbackMsg && (
+            <View
+              style={[
+                styles.feedbackBox,
+                feedbackMsg.type === "success"
+                  ? styles.feedbackSuccess
+                  : styles.feedbackError,
+              ]}
+            >
+              <Ionicons
+                name={
+                  feedbackMsg.type === "success"
+                    ? "checkmark-circle"
+                    : "alert-circle"
+                }
+                size={18}
+                color={feedbackMsg.type === "success" ? "#16A34A" : "#DC2626"}
+              />
+              <Text
+                style={[
+                  styles.feedbackText,
+                  feedbackMsg.type === "success"
+                    ? styles.feedbackTextSuccess
+                    : styles.feedbackTextError,
+                ]}
+              >
+                {feedbackMsg.text}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.modalButtons}>
             {submitting ? (
               <ActivityIndicator color="#285A71" />
@@ -264,6 +303,35 @@ export default function PerfilMeetingModal({
 }
 
 const styles = StyleSheet.create({
+  feedbackBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  feedbackSuccess: {
+    backgroundColor: "#DCFCE7",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+  feedbackError: {
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  feedbackText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  feedbackTextSuccess: {
+    color: "#15803D",
+  },
+  feedbackTextError: {
+    color: "#B91C1C",
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(38, 50, 56, 0.30)",

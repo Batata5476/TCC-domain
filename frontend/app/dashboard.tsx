@@ -533,7 +533,10 @@ export default function Dashboard() {
     }
   };
 
-  const handleUpdateMeetingStatus = async (meeting: MeetingItem) => {
+  const handleUpdateMeetingStatus = async (
+    meeting: MeetingItem,
+    newStatus: "AGENDADA" | "CONCLUIDA" | "RECUSADA" | "CANCELADA" = "CONCLUIDA",
+  ) => {
     if (updatingMeetingId !== null) return;
 
     setUpdatingMeetingId(meeting.pk_id_reuniao);
@@ -542,25 +545,36 @@ export default function Dashboard() {
         `/meetings/${meeting.pk_id_reuniao}/status`,
         {
           method: "PATCH",
-          body: JSON.stringify({ status_reuniao: "CONCLUIDA" }),
+          body: JSON.stringify({ status_reuniao: newStatus }),
         },
       );
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(body.message || "Não foi possível concluir a reunião.");
+        throw new Error(body.message || "Não foi possível atualizar a reunião.");
       }
 
       setMeetings((current) =>
         current.map((item) =>
           item.pk_id_reuniao === meeting.pk_id_reuniao
-            ? { ...item, status_reuniao: "CONCLUIDA" }
+            ? { ...item, status_reuniao: newStatus }
             : item,
         ),
       );
+
+      const msg =
+        newStatus === "AGENDADA"
+          ? "Reunião aceita e agendada com sucesso!"
+          : newStatus === "RECUSADA"
+            ? "Solicitação de reunião recusada."
+            : newStatus === "CANCELADA"
+              ? "Solicitação cancelada."
+              : "Reunião concluída com sucesso!";
+
+      Alert.alert("Reunião Atualizada 👏", msg);
     } catch (error) {
       Alert.alert(
         "Erro",
-        error instanceof Error ? error.message : "Não foi possível concluir a reunião.",
+        error instanceof Error ? error.message : "Não foi possível atualizar a reunião.",
       );
     } finally {
       setUpdatingMeetingId(null);
@@ -667,16 +681,16 @@ export default function Dashboard() {
                 task.status === 1
                   ? "#10B981"
                   : task.status === 2
-                  ? "#D97706"
-                  : "#94A3B8",
+                    ? "#D97706"
+                    : "#94A3B8",
               marginTop: 1,
             }}
           >
             {task.status === 3
               ? "Pendente"
               : task.status === 2
-              ? "Em andamento"
-              : "Concluída"}
+                ? "Em andamento"
+                : "Concluída"}
           </Text>
         </View>
 
@@ -768,6 +782,7 @@ export default function Dashboard() {
   };
 
   const renderMeeting = (meeting: MeetingItem) => {
+    const isCompany = userType === "company";
     const rawDate =
       typeof meeting.data_reuniao === "string" && meeting.data_reuniao.includes("T")
         ? meeting.data_reuniao.split("T")[0]
@@ -836,12 +851,56 @@ export default function Dashboard() {
               {meeting.status_reuniao || "AGENDADA"}
             </Text>
           </View>
-          {isScheduled && !isCompleted ? (
+          {isPending && isCompany ? (
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              <TouchableOpacity
+                style={[styles.checkButton, { backgroundColor: "#DC2626" }]}
+                activeOpacity={0.8}
+                disabled={updatingMeetingId !== null}
+                onPress={() => handleUpdateMeetingStatus(meeting, "RECUSADA")}
+                accessibilityLabel="Recusar solicitação de reunião"
+              >
+                {updatingMeetingId === meeting.pk_id_reuniao ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="close" size={16} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.checkButton, { backgroundColor: "#10B981" }]}
+                activeOpacity={0.8}
+                disabled={updatingMeetingId !== null}
+                onPress={() => handleUpdateMeetingStatus(meeting, "AGENDADA")}
+                accessibilityLabel="Aceitar e agendar reunião"
+              >
+                {updatingMeetingId === meeting.pk_id_reuniao ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : isPending && !isCompany && meeting.solicitante_id === userData?.id ? (
+            <TouchableOpacity
+              style={[styles.checkButton, { backgroundColor: "#94A3B8" }]}
+              activeOpacity={0.8}
+              disabled={updatingMeetingId !== null}
+              onPress={() => handleUpdateMeetingStatus(meeting, "CANCELADA")}
+              accessibilityLabel="Cancelar minha solicitação"
+            >
+              {updatingMeetingId === meeting.pk_id_reuniao ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="close" size={16} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          ) : isScheduled && !isCompleted ? (
             <TouchableOpacity
               style={[styles.checkButton, { backgroundColor: "#10B981" }]}
               activeOpacity={0.8}
               disabled={updatingMeetingId !== null}
-              onPress={() => handleUpdateMeetingStatus(meeting)}
+              onPress={() => handleUpdateMeetingStatus(meeting, "CONCLUIDA")}
               accessibilityLabel="Marcar reunião como concluída"
             >
               {updatingMeetingId === meeting.pk_id_reuniao ? (
@@ -923,7 +982,7 @@ export default function Dashboard() {
                 styles.dateButton,
                 isSelected && styles.dateButtonSelected,
                 hoveredDate === index &&
-                  styles.dateButtonHover,
+                styles.dateButtonHover,
               ]}
             >
               <Text
@@ -951,7 +1010,7 @@ export default function Dashboard() {
             style={[
               styles.tabButton,
               activeTab === "Tarefas" &&
-                styles.tabButtonActive,
+              styles.tabButtonActive,
             ]}
             onPress={() => setActiveTab("Tarefas")}
             activeOpacity={0.8}
@@ -960,7 +1019,7 @@ export default function Dashboard() {
               style={[
                 styles.tabLabel,
                 activeTab === "Tarefas" &&
-                  styles.tabLabelActive,
+                styles.tabLabelActive,
               ]}
             >
               Tarefas
@@ -971,7 +1030,7 @@ export default function Dashboard() {
             style={[
               styles.tabButton,
               activeTab === "Reuniões" &&
-                styles.tabButtonActive,
+              styles.tabButtonActive,
             ]}
             onPress={() => setActiveTab("Reuniões")}
             activeOpacity={0.8}
@@ -980,7 +1039,7 @@ export default function Dashboard() {
               style={[
                 styles.tabLabel,
                 activeTab === "Reuniões" &&
-                  styles.tabLabelActive,
+                styles.tabLabelActive,
               ]}
             >
               Reuniões
@@ -1277,7 +1336,7 @@ export default function Dashboard() {
         style={[
           styles.floatingButton,
           menuOpen &&
-            styles.floatingButtonActive,
+          styles.floatingButtonActive,
         ]}
         activeOpacity={0.85}
         onPress={() =>
@@ -1369,7 +1428,7 @@ export default function Dashboard() {
         >
           <Pressable
             style={styles.accountModal}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={styles.accountModalHeader}>
               <Text style={styles.accountModalTitle}>
@@ -1395,7 +1454,7 @@ export default function Dashboard() {
               disabled={uploadingPhoto}
             >
               {userPhoto ||
-              userData?.foto ? (
+                userData?.foto ? (
                 <Image
                   source={{
                     uri:
@@ -1835,7 +1894,7 @@ export default function Dashboard() {
                 style={[
                   styles.optionBtn,
                   taskPriority === 1 &&
-                    styles.optionBtnUrgent,
+                  styles.optionBtnUrgent,
                 ]}
                 onPress={() =>
                   setTaskPriority(1)
@@ -1845,7 +1904,7 @@ export default function Dashboard() {
                   style={[
                     styles.optionText,
                     taskPriority === 1 &&
-                      styles.optionTextActive,
+                    styles.optionTextActive,
                   ]}
                 >
                   Urgente
@@ -1856,7 +1915,7 @@ export default function Dashboard() {
                 style={[
                   styles.optionBtn,
                   taskPriority === 2 &&
-                    styles.optionBtnNormal,
+                  styles.optionBtnNormal,
                 ]}
                 onPress={() =>
                   setTaskPriority(2)
@@ -1866,7 +1925,7 @@ export default function Dashboard() {
                   style={[
                     styles.optionText,
                     taskPriority === 2 &&
-                      styles.optionTextActive,
+                    styles.optionTextActive,
                   ]}
                 >
                   Normal
@@ -1887,7 +1946,7 @@ export default function Dashboard() {
                   style={[
                     styles.optionBtn,
                     taskDueDate === opt &&
-                      styles.optionBtnNormal,
+                    styles.optionBtnNormal,
                   ]}
                   onPress={() =>
                     setTaskDueDate(opt)
@@ -1897,14 +1956,14 @@ export default function Dashboard() {
                     style={[
                       styles.optionText,
                       taskDueDate === opt &&
-                        styles.optionTextActive,
+                      styles.optionTextActive,
                     ]}
                   >
                     {opt === "hoje"
                       ? "Hoje"
                       : opt === "amanha"
-                      ? "Amanhã"
-                      : "7 Dias"}
+                        ? "Amanhã"
+                        : "7 Dias"}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1930,7 +1989,7 @@ export default function Dashboard() {
                         style={[
                           styles.employeeRow,
                           sel &&
-                            styles.employeeRowActive,
+                          styles.employeeRowActive,
                         ]}
                         onPress={() =>
                           setSelectedEmployeeId(
@@ -1942,7 +2001,7 @@ export default function Dashboard() {
                           style={[
                             styles.employeeText,
                             sel &&
-                              styles.employeeTextActive,
+                            styles.employeeTextActive,
                           ]}
                         >
                           {emp.nome}
@@ -2123,7 +2182,7 @@ export default function Dashboard() {
                       style={[
                         styles.employeeRow,
                         isSelected &&
-                          styles.employeeRowActive,
+                        styles.employeeRowActive,
                       ]}
                       onPress={() => {
                         if (isSelected) {
@@ -2148,7 +2207,7 @@ export default function Dashboard() {
                         style={[
                           styles.employeeText,
                           isSelected &&
-                            styles.employeeTextActive,
+                          styles.employeeTextActive,
                         ]}
                       >
                         {emp.nome}

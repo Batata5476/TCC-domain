@@ -210,6 +210,13 @@ export default function PerfilFunc() {
             />
 
             <PerfilAction
+              icon="happy-outline"
+              text="registro de humor & bem-estar"
+              onPress={() => router.push("/bemEstar")}
+              showAdd={false}
+            />
+
+            <PerfilAction
               icon="checkbox-outline"
               text="ver minhas tarefas"
               onPress={() => router.push("/dashboard")}

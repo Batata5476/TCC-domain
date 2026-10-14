@@ -27,6 +27,7 @@ export default function RootLayout() {
         <Stack.Screen name="perfilAdm" options={{ title: "Perfil Administrativo", headerShown: false }} />
         <Stack.Screen name="perfilFunc" options={{ title: "Perfil Colaborador", headerShown: false }} />
         <Stack.Screen name="DadosTrabalhistas" options={{ title: "Dados Trabalhistas", headerShown: false }} />
+        <Stack.Screen name="bemEstar" options={{ title: "Bem-Estar", headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
 

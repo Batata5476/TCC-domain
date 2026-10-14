@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Image,
+  Alert,
 } from "react-native";
 
 import { useRouter } from "expo-router";
@@ -12,6 +13,7 @@ import PerfilHeader from "../components/perfil/perfilHeader";
 import PerfilMeetingModal from "../components/perfil/PerfilMeetingModal";
 import PerfilMedicalModal from "../components/perfil/PerfilMedicalModal";
 import PerfilAction from "../components/perfil/PerfilAction";
+import { authenticatedFetch } from "../services/api";
 
 const humorOptions = {
   angry: {
@@ -50,15 +52,105 @@ export function Emotions() {
 
   const [humorSelecionado, setHumorSelecionado] =
     useState<number | null>(null);
+  const [jaRegistrouHoje, setJaRegistrouHoje] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<{
+    type: "success" | "info" | "error";
+    text: string;
+  } | null>(null);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [occurrenceModalVisible, setOccurrenceModalVisible] = useState(false);
 
   const [subject, setSubject] = useState("");
+  const [salvandoHumor, setSalvandoHumor] = useState(false);
+
+  // Carrega o humor já registrado hoje, se houver
+  useEffect(() => {
+    const loadTodayHumor = async () => {
+      try {
+        const res = await authenticatedFetch("/wellbeing");
+        if (res.ok) {
+          const body = await res.json();
+          const humores = body.data || [];
+          if (humores.length > 0) {
+            const ultimo = humores[0];
+            const dataUltimo = new Date(ultimo.dth_humor);
+            const hoje = new Date();
+            const ehHoje =
+              dataUltimo.getDate() === hoje.getDate() &&
+              dataUltimo.getMonth() === hoje.getMonth() &&
+              dataUltimo.getFullYear() === hoje.getFullYear();
+
+            if (ehHoje) {
+              setHumorSelecionado(ultimo.humor_func);
+              setJaRegistrouHoje(true);
+              setFeedbackMsg({
+                type: "info",
+                text: "Você já registrou seu humor hoje! Cada colaborador pode registrar uma vez por dia.",
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao carregar humor de hoje:", e);
+      }
+    };
+
+    loadTodayHumor();
+  }, []);
+
+  const handleSelectHumor = async (humorId: number) => {
+    if (salvandoHumor) return;
+
+    if (jaRegistrouHoje) {
+      setFeedbackMsg({
+        type: "info",
+        text: "Você já registrou seu humor hoje. Volte amanhã para um novo registro!",
+      });
+      return;
+    }
+
+    try {
+      setSalvandoHumor(true);
+      const res = await authenticatedFetch("/wellbeing", {
+        method: "POST",
+        body: JSON.stringify({ humor_func: humorId }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        setHumorSelecionado(humorId);
+        setJaRegistrouHoje(true);
+        setFeedbackMsg({
+          type: "success",
+          text: "Humor registrado com sucesso! Obrigado pelo seu registro.",
+        });
+      } else if (res.status === 409) {
+        setJaRegistrouHoje(true);
+        setFeedbackMsg({
+          type: "info",
+          text: body.message || "Você já registrou seu humor hoje.",
+        });
+      } else {
+        setFeedbackMsg({
+          type: "error",
+          text: body.message || "Não foi possível registrar o humor.",
+        });
+      }
+    } catch (e) {
+      setFeedbackMsg({
+        type: "error",
+        text: "Erro ao conectar com o servidor.",
+      });
+    } finally {
+      setSalvandoHumor(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <PerfilHeader />
+      <PerfilHeader onBack={() => router.push("/dashboard")} />
 
       {/* Seção das emoções */}
       <View style={styles.emotionSection}>
@@ -67,24 +159,50 @@ export function Emotions() {
         </Text>
 
         <View style={styles.emotionsContainer}>
-          {Object.values(humorOptions).map((humor) => (
-            <TouchableOpacity
-              key={humor.id}
-              style={[
-                styles.emotionButton,
-                humorSelecionado === humor.id &&
-                  styles.emotionButtonSelected,
-              ]}
-              onPress={() => setHumorSelecionado(humor.id)}
-              activeOpacity={0.7}
-            >
-              <Image
-                source={humor.image}
-                style={styles.emotionImage}
-              />
-            </TouchableOpacity>
-          ))}
+          {Object.values(humorOptions).map((humor) => {
+            const isSelected = humorSelecionado === humor.id;
+            return (
+              <TouchableOpacity
+                key={humor.id}
+                style={[
+                  styles.emotionButton,
+                  isSelected && styles.emotionButtonSelected,
+                  jaRegistrouHoje && !isSelected && styles.emotionButtonDisabled,
+                ]}
+                onPress={() => handleSelectHumor(humor.id)}
+                activeOpacity={0.7}
+                disabled={salvandoHumor}
+              >
+                <Image
+                  source={humor.image}
+                  style={styles.emotionImage}
+                />
+              </TouchableOpacity>
+            );
+          })}
         </View>
+
+        {feedbackMsg && (
+          <View
+            style={[
+              styles.feedbackBanner,
+              feedbackMsg.type === "success" && styles.feedbackSuccess,
+              feedbackMsg.type === "info" && styles.feedbackInfo,
+              feedbackMsg.type === "error" && styles.feedbackError,
+            ]}
+          >
+            <Text
+              style={[
+                styles.feedbackText,
+                feedbackMsg.type === "success" && styles.feedbackTextSuccess,
+                feedbackMsg.type === "info" && styles.feedbackTextInfo,
+                feedbackMsg.type === "error" && styles.feedbackTextError,
+              ]}
+            >
+              {feedbackMsg.text}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Card Histórico Médico */}
@@ -174,7 +292,59 @@ const styles = StyleSheet.create({
   },
 
   emotionButtonSelected: {
-    backgroundColor: "#E5E5E5",
+    backgroundColor: "#E2E8F0",
+    borderWidth: 2,
+    borderColor: "#285A71",
+  },
+
+  emotionButtonDisabled: {
+    opacity: 0.45,
+  },
+
+  feedbackBanner: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    width: "90%",
+    alignItems: "center",
+  },
+
+  feedbackSuccess: {
+    backgroundColor: "#DCFCE7",
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+  },
+
+  feedbackInfo: {
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+  },
+
+  feedbackError: {
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+
+  feedbackText: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  feedbackTextSuccess: {
+    color: "#15803D",
+  },
+
+  feedbackTextInfo: {
+    color: "#B45309",
+  },
+
+  feedbackTextError: {
+    color: "#B91C1C",
   },
 
   emotionImage: {
@@ -208,5 +378,5 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 });
-2
+
 export default Emotions;
