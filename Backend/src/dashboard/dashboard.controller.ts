@@ -19,6 +19,14 @@ export class DashboardController {
     return this.dashboardService.getCompanyDashboard(req.user.empresa_id);
   }
 
+  @Get('company/emotions')
+  @Roles(...ADMIN_ROLES)
+  @Permissions('dashboard.company.read')
+  async getCompanyEmotionStats(@Req() req) {
+    // Empresa sempre obtida do JWT, garantindo o isolamento dos dados
+    return this.dashboardService.getCompanyEmotionStats(req.user.empresa_id);
+  }
+
   @Get('user')
   @Permissions('dashboard.user.read')
   async getUserDashboard(@Req() req) {

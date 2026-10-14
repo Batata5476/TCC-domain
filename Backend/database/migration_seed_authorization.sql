@@ -54,7 +54,7 @@ WHERE r.nome = 'Funcionário'
     'users.read', 'users.update',
     'dashboard.user.read',
     'chat.read', 'chat.create', 'chat.delete',
-    'meetings.read',
+    'meetings.read', 'meetings.create',
     'occurrences.read', 'occurrences.create', 'occurrences.update', 'occurrences.delete',
     'tasks.read', 'tasks.create', 'tasks.update',
     'wellbeing.read', 'wellbeing.create',

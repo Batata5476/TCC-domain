@@ -136,4 +136,30 @@ export class DashboardService {
       },
     };
   }
+
+  // Contabiliza os registros de humor por emoção (apenas totais agregados, sem dados pessoais)
+  async getCompanyEmotionStats(companyId: number) {
+    const rows: { humor: number | string; total: number | string }[] =
+      await this.humorRepository
+        .createQueryBuilder('humor')
+        .innerJoin(User, 'user', 'humor.fk_id_func = user.id')
+        .select('humor.humor_func', 'humor')
+        .addSelect('COUNT(*)', 'total')
+        .where('user.empresa_id = :companyId', { companyId })
+        .groupBy('humor.humor_func')
+        .getRawMany();
+
+    const counts = rows.map((row) => ({
+      humor: Number(row.humor),
+      total: Number(row.total),
+    }));
+
+    return {
+      status: 'success',
+      data: {
+        totalRegistros: counts.reduce((acc, c) => acc + c.total, 0),
+        porEmocao: counts,
+      },
+    };
+  }
 }

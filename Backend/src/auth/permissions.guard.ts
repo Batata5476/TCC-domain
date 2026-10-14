@@ -15,6 +15,7 @@ const DEFAULT_EMPLOYEE_PERMISSIONS = [
 	'chat.create',
 	'chat.delete',
 	'meetings.read',
+	'meetings.create',
 	'occurrences.read',
 	'occurrences.create',
 	'occurrences.update',
