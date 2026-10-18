@@ -6,6 +6,10 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  SafeAreaView,
+  ScrollView,
+  Platform,
+  StatusBar,
 } from "react-native";
 
 import { useRouter } from "expo-router";
@@ -149,100 +153,105 @@ export function Emotions() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <PerfilHeader onBack={() => router.push("/dashboard")} />
 
-      {/* Seção das emoções */}
-      <View style={styles.emotionSection}>
-        <Text style={styles.title}>
-          Como você está se sentindo hoje?
-        </Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Seção das emoções */}
+        <View style={styles.emotionSection}>
+          <Text style={styles.title}>
+            Como você está se sentindo hoje?
+          </Text>
 
-        <View style={styles.emotionsContainer}>
-          {Object.values(humorOptions).map((humor) => {
-            const isSelected = humorSelecionado === humor.id;
-            return (
-              <TouchableOpacity
-                key={humor.id}
-                style={[
-                  styles.emotionButton,
-                  isSelected && styles.emotionButtonSelected,
-                  jaRegistrouHoje && !isSelected && styles.emotionButtonDisabled,
-                ]}
-                onPress={() => handleSelectHumor(humor.id)}
-                activeOpacity={0.7}
-                disabled={salvandoHumor}
-              >
-                <Image
-                  source={humor.image}
-                  style={styles.emotionImage}
-                />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+          <View style={styles.emotionsContainer}>
+            {Object.values(humorOptions).map((humor) => {
+              const isSelected = humorSelecionado === humor.id;
+              return (
+                <TouchableOpacity
+                  key={humor.id}
+                  style={[
+                    styles.emotionButton,
+                    isSelected && styles.emotionButtonSelected,
+                    jaRegistrouHoje && !isSelected && styles.emotionButtonDisabled,
+                  ]}
+                  onPress={() => handleSelectHumor(humor.id)}
+                  activeOpacity={0.7}
+                  disabled={salvandoHumor}
+                >
+                  <Image
+                    source={humor.image}
+                    style={styles.emotionImage}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-        {feedbackMsg && (
-          <View
-            style={[
-              styles.feedbackBanner,
-              feedbackMsg.type === "success" && styles.feedbackSuccess,
-              feedbackMsg.type === "info" && styles.feedbackInfo,
-              feedbackMsg.type === "error" && styles.feedbackError,
-            ]}
-          >
-            <Text
+          {feedbackMsg && (
+            <View
               style={[
-                styles.feedbackText,
-                feedbackMsg.type === "success" && styles.feedbackTextSuccess,
-                feedbackMsg.type === "info" && styles.feedbackTextInfo,
-                feedbackMsg.type === "error" && styles.feedbackTextError,
+                styles.feedbackBanner,
+                feedbackMsg.type === "success" && styles.feedbackSuccess,
+                feedbackMsg.type === "info" && styles.feedbackInfo,
+                feedbackMsg.type === "error" && styles.feedbackError,
               ]}
             >
-              {feedbackMsg.text}
-            </Text>
-          </View>
-        )}
-      </View>
+              <Text
+                style={[
+                  styles.feedbackText,
+                  feedbackMsg.type === "success" && styles.feedbackTextSuccess,
+                  feedbackMsg.type === "info" && styles.feedbackTextInfo,
+                  feedbackMsg.type === "error" && styles.feedbackTextError,
+                ]}
+              >
+                {feedbackMsg.text}
+              </Text>
+            </View>
+          )}
+        </View>
 
-      {/* Card Histórico Médico */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          Histórico Médico
-        </Text>
+        {/* Card Histórico Médico */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            Histórico Médico
+          </Text>
 
-        <Text style={styles.cardContent}>
-          Card Content
-        </Text>
-      </View>
+          <Text style={styles.cardContent}>
+            Card Content
+          </Text>
+        </View>
 
-      {/* Card Atestados Médicos */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          Atestados Médicos
-        </Text>
+        {/* Card Atestados Médicos */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            Atestados Médicos
+          </Text>
 
-        <Text style={styles.cardContent}>
-          Card Content
-        </Text>
-      </View>
+          <Text style={styles.cardContent}>
+            Card Content
+          </Text>
+        </View>
 
-      {/* Ferramentas do perfil */}
-      <View style={styles.actionsContainer}>
-        <PerfilAction
-          icon="calendar-outline"
-          text="solicitar reunião"
-          onPress={() => setModalVisible(true)}
-          showAdd={false}
-        />
+        {/* Ferramentas do perfil */}
+        <View style={styles.actionsContainer}>
+          <PerfilAction
+            icon="calendar-outline"
+            text="solicitar reunião"
+            onPress={() => setModalVisible(true)}
+            showAdd={false}
+          />
 
-        <PerfilAction
-          icon="alert-circle-outline"
-          text="relatar ocorrência"
-          onPress={() => setOccurrenceModalVisible(true)}
-          showAdd={false}
-        />
-      </View>
+          <PerfilAction
+            icon="alert-circle-outline"
+            text="relatar ocorrência"
+            onPress={() => setOccurrenceModalVisible(true)}
+            showAdd={false}
+          />
+        </View>
+      </ScrollView>
 
       {/* Modal de reunião */}
       <PerfilMeetingModal
@@ -256,13 +265,18 @@ export function Emotions() {
         visible={occurrenceModalVisible}
         onClose={() => setOccurrenceModalVisible(false)}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#F8FAFC",
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 0,
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
 
   emotionSection: {

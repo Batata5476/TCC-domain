@@ -6,7 +6,6 @@
     "orientation": "portrait",
     "scheme": "tcc",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "plugins": [
       "expo-router",
       "expo-secure-store",
@@ -15,7 +14,9 @@
         {
           "locationWhenInUsePermission": "Permita que o Ponto-E use sua localização para registrar a jornada."
         }
-      ]
+      ],
+      "expo-status-bar",
+      "expo-font"
     ]
   }
 }

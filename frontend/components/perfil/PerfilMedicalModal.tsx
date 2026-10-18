@@ -11,6 +11,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import PerfilButton from "./PerfilButton";
 import { authenticatedFetch } from "../../services/api";
@@ -196,7 +198,11 @@ export default function PerfilMedicalModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalBox}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ width: "100%", justifyContent: "center", alignItems: "center" }}
+        >
+          <View style={styles.modalBox}>
           {/* Cabeçalho */}
           <View style={styles.modalHeader}>
             <View
@@ -410,9 +416,10 @@ export default function PerfilMedicalModal({
             )}
           </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </KeyboardAvoidingView>
+    </View>
+  </Modal>
+);
 }
 
 const styles = StyleSheet.create({

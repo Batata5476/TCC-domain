@@ -9,15 +9,19 @@ type InputProps = {
   secureTextEntry?: boolean;
   value: string;
   onChangeText: (text: string) => void;
+  keyboardType?: "default" | "numeric" | "email-address";
+  maxLength?: number;
 };
 
-function Input({ placeholder, secureTextEntry, value, onChangeText }: InputProps) {
+function Input({ placeholder, secureTextEntry, value, onChangeText, keyboardType, maxLength }: InputProps) {
   return (
     <TextInput
       placeholder={placeholder}
       secureTextEntry={secureTextEntry}
       value={value}
       onChangeText={onChangeText}
+      keyboardType={keyboardType || "default"}
+      maxLength={maxLength}
       style={styles.input}
     />
   );
@@ -32,6 +36,15 @@ export default function CadastroEmpresa() {
   const [tipo, setTipo] = useState("");
   const [senha, setSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
+
+  const formatCnpj = (text: string) => {
+    const digits = text.replace(/\D/g, "").slice(0, 14);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
+  };
 
  // Feedback com modal para sucesso, erro, ou informações
   const [feedback, setFeedback] = useState<{
@@ -133,8 +146,19 @@ export default function CadastroEmpresa() {
       <Text style={styles.title}>Olá! Seja bem vindo(a)!</Text>
 
       <Input placeholder="Nome da empresa" value={nome} onChangeText={setNome} />
-      <Input placeholder="CNPJ" value={cnpj} onChangeText={setCnpj} />
-      <Input placeholder="E-mail empresarial" value={email} onChangeText={setEmail} />
+      <Input
+        placeholder="CNPJ (00.000.000/0000-00)"
+        value={cnpj}
+        onChangeText={(text) => setCnpj(formatCnpj(text))}
+        keyboardType="numeric"
+        maxLength={18}
+      />
+      <Input
+        placeholder="E-mail empresarial"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+      />
       <Input placeholder="Tipo de empresa" value={tipo} onChangeText={setTipo} />
       <Input placeholder="Código da empresa (Senha)" secureTextEntry value={senha} onChangeText={setSenha} />
       <Input placeholder="Confirmar código" secureTextEntry value={confirmarSenha} onChangeText={setConfirmarSenha} />

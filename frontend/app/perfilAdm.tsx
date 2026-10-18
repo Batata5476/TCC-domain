@@ -10,6 +10,7 @@ import PerfilInfo from "../components/perfil/PerfilInfo";
 import PerfilMeetingModal from "../components/perfil/PerfilMeetingModal";
 import PerfilMedicalModal from "../components/perfil/PerfilMedicalModal";
 import PerfilPointsModal from "../components/perfil/PerfilPointsModal";
+import PerfilBackupModal from "../components/perfil/PerfilBackupModal";
 import PieChartCard from "../components/common/PieChartCard";
 import EmotionsPieChartCard from "../components/common/EmotionsPieChartCard";
 import { authenticatedFetch } from "../services/api";
@@ -45,6 +46,7 @@ export default function PerfilAdm() {
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [medicalOpen, setMedicalOpen] = useState(false);
   const [pointsOpen, setPointsOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
   const [subject, setSubject] = useState("");
 
   const loadProfile = async () => {
@@ -281,6 +283,20 @@ export default function PerfilAdm() {
           onPress={() => router.push("/dashboard")}
           showAdd={false}
         />
+
+        <PerfilAction
+          icon="happy-outline"
+          text="registro de humor & bem-estar"
+          onPress={() => router.push("/bemEstar")}
+          showAdd={false}
+        />
+
+        <PerfilAction
+          icon="cloud-upload-outline"
+          text="backup e restauração da empresa"
+          onPress={() => setBackupOpen(true)}
+          showAdd={false}
+        />
       </ScrollView>
 
       {/* Modais */}
@@ -300,6 +316,11 @@ export default function PerfilAdm() {
         visible={pointsOpen}
         onClose={() => setPointsOpen(false)}
         pontos={user?.pontos ?? 0}
+      />
+
+      <PerfilBackupModal
+        visible={backupOpen}
+        onClose={() => setBackupOpen(false)}
       />
     </SafeAreaView>
   );

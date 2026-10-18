@@ -671,11 +671,21 @@ export default function LoginScreen() {
 
       <Modal visible={modalStep !== "none"} transparent animationType="slide" onRequestClose={closeModal}>
         <View style={ms.overlay}>
-          <View style={ms.sheet}>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {renderModal()}
-            </ScrollView>
-          </View>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={{ width: "100%", justifyContent: "flex-end" }}
+          >
+            <View style={ms.sheet}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: SCREEN_HEIGHT * 0.75 }}
+                contentContainerStyle={{ paddingBottom: 24 }}
+              >
+                {renderModal()}
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </GestureHandlerRootView>
@@ -808,8 +818,8 @@ const ms = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingHorizontal: 28,
     paddingTop: 28,
-    paddingBottom: 48,
-    maxHeight: "88%",
+    paddingBottom: 28,
+    maxHeight: "92%",
   },
   title: { fontSize: 22, fontWeight: "700", color: "#0f2b3d", marginBottom: 6 },
   subtitle: { fontSize: 13, color: "#78909c", marginBottom: 22, lineHeight: 18 },

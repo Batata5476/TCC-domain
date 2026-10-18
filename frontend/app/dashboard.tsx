@@ -13,6 +13,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -21,6 +23,8 @@ import { getToken, logout } from "../services/auth";
 import * as ImagePicker from "expo-image-picker";
 import { API_URL } from "../services/config";
 import PerfilMeetingModal from "../components/perfil/PerfilMeetingModal";
+import CalendarDatePicker from "../components/common/CalendarDatePicker";
+import TimePickerInput from "../components/common/TimePickerInput";
 
 const cooperaLogo = require("../assets/coopera_logo.png");
 
@@ -34,6 +38,8 @@ type UserDashboardPayload = {
   foto: string | null;
   tarefasPendentes: number;
   tarefasConcluidas: number;
+  cargo?: string;
+  role?: string;
 };
 
 type CompanyDashboardPayload = {
@@ -133,8 +139,12 @@ export default function Dashboard() {
   const [creatingTask, setCreatingTask] = useState(false);
   const [taskPriority, setTaskPriority] = useState(2);
   const [taskDueDate, setTaskDueDate] = useState<
-    "hoje" | "amanha" | "semana"
+    "hoje" | "amanha" | "semana" | "outro"
   >("hoje");
+  const [customTaskDate, setCustomTaskDate] = useState(() => {
+    const d = new Date();
+    return d.toISOString().split("T")[0];
+  });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(
     null
   );
@@ -242,6 +252,15 @@ export default function Dashboard() {
           const body = await userRes.json();
           setUserData(body.data);
           setUserPhoto(body.data?.foto || null);
+
+          // Se for administrador, carrega também os funcionários para gestão
+          if (body.data?.role === "Administrador" || body.data?.role === "Administrador Master") {
+            const empRes = await authenticatedFetch("/users");
+            if (empRes.ok) {
+              const empBody = await empRes.json();
+              setEmployees(empBody.data ?? []);
+            }
+          }
         } else {
           router.replace("/");
           return;
@@ -415,19 +434,21 @@ export default function Dashboard() {
       return;
     }
 
-    const dueDate = new Date();
-
-    if (taskDueDate === "amanha") {
-      dueDate.setDate(dueDate.getDate() + 1);
-    } else if (taskDueDate === "semana") {
-      dueDate.setDate(dueDate.getDate() + 7);
+    let dateStringLocal = "";
+    if (taskDueDate === "outro" && customTaskDate) {
+      dateStringLocal = customTaskDate;
+    } else {
+      const dueDate = new Date();
+      if (taskDueDate === "amanha") {
+        dueDate.setDate(dueDate.getDate() + 1);
+      } else if (taskDueDate === "semana") {
+        dueDate.setDate(dueDate.getDate() + 7);
+      }
+      const year = dueDate.getFullYear();
+      const month = String(dueDate.getMonth() + 1).padStart(2, "0");
+      const day = String(dueDate.getDate()).padStart(2, "0");
+      dateStringLocal = `${year}-${month}-${day}`;
     }
-
-    const year = dueDate.getFullYear();
-    const month = String(dueDate.getMonth() + 1).padStart(2, "0");
-    const day = String(dueDate.getDate()).padStart(2, "0");
-
-    const dateStringLocal = `${year}-${month}-${day}`;
 
     setTaskError("");
     setCreatingTask(true);
@@ -782,7 +803,10 @@ export default function Dashboard() {
   };
 
   const renderMeeting = (meeting: MeetingItem) => {
-    const isCompany = userType === "company";
+    const isCompany =
+      userType === "company" ||
+      (userData?.cargo || "").toLowerCase().includes("admin") ||
+      (userData?.cargo || "").toLowerCase().includes("administrador");
     const rawDate =
       typeof meeting.data_reuniao === "string" && meeting.data_reuniao.includes("T")
         ? meeting.data_reuniao.split("T")[0]
@@ -1748,7 +1772,7 @@ export default function Dashboard() {
                 width: "100%",
               }}
             >
-              {userType === "user" && (
+              {(userType === "user" || userData?.role === "Administrador") && (
                 <TouchableOpacity
                   style={{
                     flexDirection: "row",
@@ -1783,7 +1807,7 @@ export default function Dashboard() {
                 </TouchableOpacity>
               )}
 
-              {userType === "company" && (
+              {(userType === "company" || userData?.role === "Administrador" || userData?.role === "Administrador Master") && (
                 <TouchableOpacity
                   style={{
                     flexDirection: "row",
@@ -1848,8 +1872,12 @@ export default function Dashboard() {
         }
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.taskModal}>
-            <View style={styles.accountModalHeader}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={{ width: "100%", justifyContent: "flex-end" }}
+          >
+            <View style={styles.taskModal}>
+              <View style={styles.accountModalHeader}>
               <Text style={styles.accountModalTitle}>
                 Nova Tarefa
               </Text>
@@ -1867,6 +1895,12 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
 
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: 420 }}
+              contentContainerStyle={{ paddingBottom: 10 }}
+            >
             <Text style={styles.inputLabel}>
               Título / Descrição
             </Text>
@@ -1939,35 +1973,42 @@ export default function Dashboard() {
 
             <View style={styles.optionRow}>
               {(
-                ["hoje", "amanha", "semana"] as const
-              ).map((opt) => (
+                [
+                  { key: "hoje", label: "Hoje" },
+                  { key: "amanha", label: "Amanhã" },
+                  { key: "semana", label: "7 Dias" },
+                  { key: "outro", label: "Outra Data" },
+                ] as const
+              ).map(({ key, label }) => (
                 <TouchableOpacity
-                  key={opt}
+                  key={key}
                   style={[
                     styles.optionBtn,
-                    taskDueDate === opt &&
-                    styles.optionBtnNormal,
+                    taskDueDate === key && styles.optionBtnNormal,
                   ]}
-                  onPress={() =>
-                    setTaskDueDate(opt)
-                  }
+                  onPress={() => setTaskDueDate(key)}
                 >
                   <Text
                     style={[
                       styles.optionText,
-                      taskDueDate === opt &&
-                      styles.optionTextActive,
+                      taskDueDate === key && styles.optionTextActive,
                     ]}
                   >
-                    {opt === "hoje"
-                      ? "Hoje"
-                      : opt === "amanha"
-                        ? "Amanhã"
-                        : "7 Dias"}
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
+
+            {taskDueDate === "outro" && (
+              <View style={{ marginTop: 8 }}>
+                <CalendarDatePicker
+                  value={customTaskDate}
+                  onChange={setCustomTaskDate}
+                  label="Data de Entrega da Tarefa"
+                />
+              </View>
+            )}
 
             {userType === "company" && (
               <>
@@ -2020,6 +2061,7 @@ export default function Dashboard() {
                 </ScrollView>
               </>
             )}
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -2046,6 +2088,7 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -2060,24 +2103,35 @@ export default function Dashboard() {
         }
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.taskModal}>
-            <View style={styles.accountModalHeader}>
-              <Text style={styles.accountModalTitle}>
-                {userType === "company" ? "Nova Reunião" : "Solicitar Reunião"}
-              </Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={{ width: "100%", justifyContent: "flex-end" }}
+          >
+            <View style={styles.taskModal}>
+              <View style={styles.accountModalHeader}>
+                <Text style={styles.accountModalTitle}>
+                  {userType === "company" ? "Nova Reunião" : "Solicitar Reunião"}
+                </Text>
 
-              <TouchableOpacity
-                onPress={() =>
-                  setMeetingModalVisible(false)
-                }
+                <TouchableOpacity
+                  onPress={() =>
+                    setMeetingModalVisible(false)
+                  }
+                >
+                  <Ionicons
+                    name="close"
+                    size={24}
+                    color="#285A71"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 460 }}
+                contentContainerStyle={{ paddingBottom: 10 }}
               >
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color="#285A71"
-                />
-              </TouchableOpacity>
-            </View>
 
             <Text style={styles.inputLabel}>
               Assunto da Reunião
@@ -2094,40 +2148,19 @@ export default function Dashboard() {
               }}
             />
 
-            <View
-              style={{
-                flexDirection: "row",
-                gap: 12,
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>
-                  Data (AAAA-MM-DD)
-                </Text>
+            {/* Calendário Interativo */}
+            <CalendarDatePicker
+              value={meetingDate}
+              onChange={setMeetingDate}
+              label="Data da Reunião"
+            />
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#94A3B8"
-                  value={meetingDate}
-                  onChangeText={setMeetingDate}
-                />
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>
-                  Horário (HH:MM)
-                </Text>
-
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="14:00"
-                  placeholderTextColor="#94A3B8"
-                  value={meetingTime}
-                  onChangeText={setMeetingTime}
-                />
-              </View>
-            </View>
+            {/* Seletor Numérico de Horário */}
+            <TimePickerInput
+              value={meetingTime}
+              onChange={setMeetingTime}
+              label="Horário da Reunião"
+            />
 
             <Text style={styles.inputLabel}>Link da reunião (opcional)</Text>
             <TextInput
@@ -2225,6 +2258,7 @@ export default function Dashboard() {
                 })
               )}
             </ScrollView> : null}
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -2262,6 +2296,7 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -2849,15 +2884,17 @@ const styles = StyleSheet.create({
 
   optionRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
 
   optionBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 2,
     backgroundColor: "#ECEFD9",
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 0.5,
     borderColor: "#285A71",
   },
@@ -2873,9 +2910,10 @@ const styles = StyleSheet.create({
   },
 
   optionText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#285A71",
+    textAlign: "center",
   },
 
   optionTextActive: {

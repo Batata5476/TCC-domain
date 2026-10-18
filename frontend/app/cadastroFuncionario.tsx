@@ -112,6 +112,14 @@ export default function CadastroFuncionario() {
     }
   };
 
+  const formatCpf = (text: string) => {
+    const digits = text.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+  };
+
   const copyToClipboard = (text: string) => {
     Clipboard.setString(text);
     Alert.alert("Copiado!", "Copiado para a área de transferência.");
@@ -136,10 +144,11 @@ export default function CadastroFuncionario() {
         <Text style={styles.label}>CPF *</Text>
         <TextInput
           style={styles.input}
-          placeholder="Apenas números"
+          placeholder="000.000.000-00"
           keyboardType="numeric"
+          maxLength={14}
           value={cpf}
-          onChangeText={setCpf}
+          onChangeText={(text) => setCpf(formatCpf(text))}
         />
 
         <Text style={styles.label}>E-mail *</Text>
