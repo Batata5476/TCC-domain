@@ -278,6 +278,13 @@ export default function PerfilAdm() {
         />
 
         <PerfilAction
+          icon="person-add-outline"
+          text="cadastro de funcionário"
+          onPress={() => router.push("/cadastroFuncionario")}
+          showAdd={false}
+        />
+
+        <PerfilAction
           icon="people-outline"
           text="gestão de funcionários"
           onPress={() => router.push("/dashboard")}

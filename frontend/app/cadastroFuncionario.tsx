@@ -38,7 +38,7 @@ export default function CadastroFuncionario() {
     title: "",
     message: "",
   });
-  
+
   // Se toods os campos tiveram preenchidos, manda uma modal true 
   const handleRegister = async () => {
     if (!nome.trim() || !cpf.trim() || !email.trim() || !cargo.trim() || !setorId.trim()) {
@@ -218,7 +218,7 @@ export default function CadastroFuncionario() {
       >
         <Text style={styles.secondaryButtonText}>Voltar ao Dashboard</Text>
       </TouchableOpacity>
-      
+
       // Modal
       <FeedbackModal
         visible={feedback.visible}

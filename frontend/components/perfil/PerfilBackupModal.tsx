@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { authenticatedFetch } from "../../services/api";
 
 type BackupItem = {
@@ -29,10 +30,21 @@ export default function PerfilBackupModal({
   visible,
   onClose,
 }: PerfilBackupModalProps) {
+  const router = useRouter();
+
   const [backups, setBackups] = useState<BackupItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [restoringFile, setRestoringFile] = useState<string | null>(null);
+
+  // Modais de Diálogo Internos (100% funcionais no PC/Web e no Celular)
+  const [confirmRestoreItem, setConfirmRestoreItem] = useState<BackupItem | null>(null);
+  const [restoreSuccess, setRestoreSuccess] = useState<boolean>(false);
+  const [feedbackDialog, setFeedbackDialog] = useState<{
+    type: "success" | "error";
+    title: string;
+    message: string;
+  } | null>(null);
 
   const fetchBackups = async () => {
     try {
@@ -52,6 +64,9 @@ export default function PerfilBackupModal({
   useEffect(() => {
     if (visible) {
       fetchBackups();
+      setConfirmRestoreItem(null);
+      setRestoreSuccess(false);
+      setFeedbackDialog(null);
     }
   }, [visible]);
 
@@ -67,40 +82,32 @@ export default function PerfilBackupModal({
       const json = await res.json();
 
       if (res.ok) {
-        Alert.alert(
-          "Backup Concluído",
-          `Cópia de segurança gerada com sucesso!\n\nData: ${json.data.formattedDate}\nTamanho: ${json.data.sizeFormatted}`
-        );
+        setFeedbackDialog({
+          type: "success",
+          title: "Backup Concluído",
+          message: `Cópia de segurança gerada com sucesso!\n\nData: ${json.data.formattedDate}\nTamanho: ${json.data.sizeFormatted}`,
+        });
         await fetchBackups();
       } else {
-        Alert.alert(
-          "Falha no Backup",
-          json.message || "Não foi possível gerar a cópia de segurança."
-        );
+        setFeedbackDialog({
+          type: "error",
+          title: "Falha no Backup",
+          message: json.message || "Não foi possível gerar a cópia de segurança.",
+        });
       }
     } catch (e: any) {
-      Alert.alert(
-        "Erro de Conexão",
-        e.message || "Não foi possível conectar ao servidor."
-      );
+      setFeedbackDialog({
+        type: "error",
+        title: "Erro de Conexão",
+        message: e.message || "Não foi possível conectar ao servidor.",
+      });
     } finally {
       setCreating(false);
     }
   };
 
   const handleConfirmRestore = (item: BackupItem) => {
-    Alert.alert(
-      "Confirmar Restauração",
-      `Deseja restaurar o banco de dados a partir desta cópia?\n\nData: ${item.formattedDate}\nTamanho: ${item.sizeFormatted}\n\nOs dados atuais serão substituídos pelo conteúdo deste backup.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Restaurar",
-          style: "destructive",
-          onPress: () => executeRestore(item.filename),
-        },
-      ]
-    );
+    setConfirmRestoreItem(item);
   };
 
   const executeRestore = async (filename: string) => {
@@ -114,24 +121,36 @@ export default function PerfilBackupModal({
       const json = await res.json();
 
       if (res.ok) {
-        Alert.alert(
-          "Restauração Concluída",
-          "O banco de dados foi restaurado com sucesso."
-        );
+        setConfirmRestoreItem(null);
+        setRestoreSuccess(true);
         await fetchBackups();
       } else {
-        Alert.alert(
-          "Falha na Restauração",
-          json.message || "Erro ao restaurar o backup."
-        );
+        setConfirmRestoreItem(null);
+        setFeedbackDialog({
+          type: "error",
+          title: "Falha na Restauração",
+          message: json.message || "Erro ao restaurar o backup.",
+        });
       }
     } catch (e: any) {
-      Alert.alert(
-        "Erro",
-        e.message || "Falha na comunicação com o servidor durante a restauração."
-      );
+      setConfirmRestoreItem(null);
+      setFeedbackDialog({
+        type: "error",
+        title: "Erro de Conexão",
+        message: e.message || "Falha na comunicação com o servidor durante a restauração.",
+      });
     } finally {
       setRestoringFile(null);
+    }
+  };
+
+  const handleRestartSystem = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.location.href = "/";
+      window.location.reload();
+    } else {
+      onClose();
+      router.replace("/");
     }
   };
 
@@ -359,6 +378,125 @@ export default function PerfilBackupModal({
           >
             <Text style={styles.closeBtnText}>Fechar</Text>
           </TouchableOpacity>
+
+          {/* Diálogo de Confirmação de Restauração (Web e Mobile) */}
+          {confirmRestoreItem && (
+            <View style={styles.alertOverlay}>
+              <View style={styles.alertCard}>
+                <View style={[styles.alertIconCircle, { backgroundColor: "#FEE2E2" }]}>
+                  <Ionicons name="warning" size={32} color="#DC2626" />
+                </View>
+                <Text style={styles.alertTitle}>Restaurar Backup?</Text>
+                <Text style={styles.alertSubtitle}>
+                  O banco de dados será restaurado com os dados da cópia selecionada:
+                </Text>
+
+                <View style={styles.backupMetaBox}>
+                  <Text style={styles.backupMetaBoxDate}>
+                    📅 {confirmRestoreItem.formattedDate}
+                  </Text>
+                  <Text style={styles.backupMetaBoxSize}>
+                    💾 {confirmRestoreItem.sizeFormatted} • {confirmRestoreItem.filename}
+                  </Text>
+                </View>
+
+                <Text style={styles.alertWarningText}>
+                  ⚠️ Todos os dados atuais serão substituídos pelo conteúdo deste backup.
+                </Text>
+
+                <View style={styles.alertBtnRow}>
+                  <TouchableOpacity
+                    style={styles.alertCancelBtn}
+                    onPress={() => setConfirmRestoreItem(null)}
+                    disabled={!!restoringFile}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.alertCancelBtnText}>Cancelar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.alertDestructiveBtn, !!restoringFile && styles.btnDisabled]}
+                    onPress={() => executeRestore(confirmRestoreItem.filename)}
+                    disabled={!!restoringFile}
+                    activeOpacity={0.8}
+                  >
+                    {restoringFile ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.alertDestructiveBtnText}>Restaurar</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Diálogo de Restauração Concluída com Botão para Reiniciar o Sistema */}
+          {restoreSuccess && (
+            <View style={styles.alertOverlay}>
+              <View style={styles.alertCard}>
+                <View style={[styles.alertIconCircle, { backgroundColor: "#DCFCE7" }]}>
+                  <Ionicons name="checkmark-circle" size={36} color="#16A34A" />
+                </View>
+                <Text style={styles.alertTitle}>Restauração Concluída!</Text>
+                <Text style={styles.alertSubtitle}>
+                  O banco de dados foi recuperado com sucesso. Para recarregar todas as tabelas, permissões e sessões de usuários, reinicie o sistema agora.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.restartBtn}
+                  onPress={handleRestartSystem}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="refresh" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.restartBtnText}>Reiniciar Sistema Agora</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Diálogo de Feedback Geral (Backup Concluído / Erro) */}
+          {feedbackDialog && (
+            <View style={styles.alertOverlay}>
+              <View style={styles.alertCard}>
+                <View
+                  style={[
+                    styles.alertIconCircle,
+                    {
+                      backgroundColor:
+                        feedbackDialog.type === "success" ? "#DCFCE7" : "#FEE2E2",
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      feedbackDialog.type === "success"
+                        ? "checkmark-circle"
+                        : "alert-circle"
+                    }
+                    size={36}
+                    color={feedbackDialog.type === "success" ? "#16A34A" : "#DC2626"}
+                  />
+                </View>
+                <Text style={styles.alertTitle}>{feedbackDialog.title}</Text>
+                <Text style={styles.alertSubtitle}>{feedbackDialog.message}</Text>
+
+                <TouchableOpacity
+                  style={[
+                    styles.restartBtn,
+                    {
+                      backgroundColor:
+                        feedbackDialog.type === "success" ? "#285A71" : "#475569",
+                    },
+                  ]}
+                  onPress={() => setFeedbackDialog(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.restartBtnText}>Entendi</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -376,6 +514,7 @@ const styles = StyleSheet.create({
   },
   modalBox: {
     width: "100%",
+    maxWidth: 500,
     maxHeight: "90%",
     backgroundColor: "#FEFDF9",
     borderRadius: 22,
@@ -385,6 +524,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 14,
     elevation: 10,
+    position: "relative",
   },
   modalHeader: {
     flexDirection: "row",
@@ -409,47 +549,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#1E293B",
+    color: "#0F2B3D",
   },
   modalSubtitle: {
     fontSize: 12,
     color: "#64748B",
-    marginTop: 1,
   },
   lastBackupCard: {
     backgroundColor: "#F8FAFC",
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     padding: 14,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   lastBackupHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    marginBottom: 10,
   },
   cloudBadge: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#E0F2FE",
+    backgroundColor: "#E2EDF3",
     justifyContent: "center",
     alignItems: "center",
   },
   lastBackupLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
     color: "#64748B",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   lastBackupTime: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
-    color: "#0F172A",
+    color: "#0F2B3D",
     marginTop: 2,
   },
   lastBackupMeta: {
@@ -463,40 +603,42 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
-    marginTop: 10,
+    borderRadius: 20,
+    alignSelf: "flex-start",
   },
   statusPillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
-    flex: 1,
   },
   actionButtonsContainer: {
-    gap: 10,
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 18,
   },
   primaryActionBtn: {
     backgroundColor: "#285A71",
+    paddingVertical: 12,
     borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#285A71",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 3,
+  },
+  primaryActionText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   restoreLatestBtn: {
     backgroundColor: "#FEF2F2",
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: "#FECACA",
-    paddingVertical: 13,
-    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+  },
+  restoreLatestText: {
+    color: "#DC2626",
+    fontSize: 13,
+    fontWeight: "700",
   },
   btnRow: {
     flexDirection: "row",
@@ -508,32 +650,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  primaryActionText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  restoreLatestText: {
-    color: "#DC2626",
-    fontSize: 13,
-    fontWeight: "700",
-  },
   btnDisabled: {
-    opacity: 0.65,
+    opacity: 0.6,
   },
   historyHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 10,
-    marginTop: 4,
   },
   historyTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: "#334155",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   historyCard: {
     backgroundColor: "#FFFFFF",
@@ -600,5 +731,124 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#475569",
+  },
+  alertOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    zIndex: 999,
+  },
+  alertCard: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  alertIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  alertTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F2B3D",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  alertSubtitle: {
+    fontSize: 13,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  backupMetaBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    width: "100%",
+    marginBottom: 10,
+    gap: 4,
+  },
+  backupMetaBoxDate: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  backupMetaBoxSize: {
+    fontSize: 11,
+    color: "#64748B",
+  },
+  alertWarningText: {
+    fontSize: 11,
+    color: "#DC2626",
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 18,
+    lineHeight: 16,
+  },
+  alertBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+  },
+  alertCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+  },
+  alertCancelBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  alertDestructiveBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+  },
+  alertDestructiveBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  restartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#16A34A",
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    width: "100%",
+    marginTop: 8,
+  },
+  restartBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });
