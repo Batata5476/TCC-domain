@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { FuncTarefa } from './entities/func-tarefa.entity';
 import { User } from '../users/entities/user.entity';
-import { isAdminRole } from '../auth/authorization.constants';
+import { isAdminRole, ROLES } from '../auth/authorization.constants';
 
 @Injectable()
 export class TasksService {
@@ -125,10 +125,8 @@ export class TasksService {
   }
 
   async findAllByEmployee(caller: any) {
-    const isCompanyAdmin = isAdminRole(caller.role);
-    
     let associations: FuncTarefa[];
-    if (isCompanyAdmin) {
+    if (caller.role === ROLES.MASTER_ADMIN) {
       associations = await this.funcTarefaRepository.find({
         where: { fk_cod_empresa: caller.empresa_id },
         relations: ['tarefa'],

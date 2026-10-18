@@ -12,7 +12,7 @@ import { Company } from '../company/entities/company.entity';
 import { User } from '../users/entities/user.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuthorizationService } from './authorization.service';
-import { ROLES } from './authorization.constants';
+import { ROLES, isAdminRole } from './authorization.constants';
 import { MailService } from '../mail/mail.services';
 
 

@@ -6,7 +6,7 @@ import { UpdateWorkDto } from './dto/update-work.dto';
 import { Work } from './entities/work.entity';
 import { User } from '../users/entities/user.entity';
 import { Company } from '../company/entities/company.entity';
-import { isAdminRole, isEmployeeRole } from '../auth/authorization.constants';
+import { isAdminRole, isEmployeeRole, ROLES } from '../auth/authorization.constants';
 import { isPointWithinRadius } from 'geolib';
 
 // Distância máxima entre a posição do funcionário e a localização cadastrada da empresa.
@@ -54,9 +54,9 @@ export class WorkService {
 
   async findAll(caller: any) {
     const callerId = caller.sub;
-    const isCompanyAdmin = isAdminRole(caller.role);
+    const isCompanyMaster = caller.role === ROLES.MASTER_ADMIN;
 
-    if (!isCompanyAdmin) {
+    if (!isCompanyMaster) {
       const registros = await this.workRepository.find({
         where: { fk_id_func: callerId },
         order: { data_ponto: 'DESC', entrada: 'DESC' },
@@ -141,8 +141,8 @@ export class WorkService {
   }
 
   async create(createWorkDto: CreateWorkDto, caller: any) {
-    if (!isEmployeeRole(caller.role)) {
-      throw new ForbiddenException(`Apenas funcionarios podem criar registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
+    if (caller.role === ROLES.MASTER_ADMIN) {
+      throw new ForbiddenException(`Apenas colaboradores podem criar registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
     }
 
     const callerId = caller.sub;

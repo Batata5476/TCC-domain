@@ -83,7 +83,10 @@ CREATE TABLE IF NOT EXISTS reuniao (
     data_reuniao DATE NOT NULL,
     horario_reuniao TIME NOT NULL,
     assunto_reuniao VARCHAR(100) NOT NULL,
-    tipo_reuniao VARCHAR(30) NOT NULL
+    tipo_reuniao VARCHAR(30) NOT NULL,
+    status_reuniao VARCHAR(20) NOT NULL DEFAULT 'AGENDADA',
+    solicitante_id INT REFERENCES usuario(id) ON DELETE SET NULL,
+    motivo_recusa TEXT
 );
 
 CREATE TABLE IF NOT EXISTS participantes_reu (

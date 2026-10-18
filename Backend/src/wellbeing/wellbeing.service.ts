@@ -46,8 +46,8 @@ export class WellbeingService {
   }
 
   async create(createWellbeingDto: CreateWellbeingDto, caller: any) {
-    if (caller.role !== ROLES.EMPLOYEE) {
-      throw new ForbiddenException('Apenas funcionários podem registrar humor');
+    if (caller.role === ROLES.MASTER_ADMIN) {
+      throw new ForbiddenException('Apenas colaboradores físicos podem registrar humor');
     }
     const callerId = caller.sub;
 
@@ -84,10 +84,9 @@ export class WellbeingService {
 
   async findAll(caller: any) {
     const callerId = caller.sub;
-    const isCompanyAdmin =
-      isAdminRole(caller.role);
+    const isCompanyMaster = caller.role === ROLES.MASTER_ADMIN;
 
-    if (!isCompanyAdmin) {
+    if (!isCompanyMaster) {
       const humores = await this.humorRepository.find({
         where: { fk_id_func: callerId },
         order: { dth_humor: 'DESC' },

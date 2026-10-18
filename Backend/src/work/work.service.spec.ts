@@ -61,12 +61,15 @@ describe('WorkService geolocation', () => {
     expect(response.status).toBe('success');
   });
 
-  it('accepts an employee role without accent and still rejects admins', async () => {
-    const response = await service.create(point, { ...caller, role: 'Funcionario' });
+  it('accepts employee and admin employee, but rejects company master admin', async () => {
+    const responseFunc = await service.create(point, { ...caller, role: 'Funcionario' });
+    expect(responseFunc.status).toBe('success');
 
-    expect(response.status).toBe('success');
+    const responseAdmin = await service.create({ ...point, data_ponto: '2026-10-05' }, { ...caller, role: 'Administrador' });
+    expect(responseAdmin.status).toBe('success');
+
     await expect(
-      service.create(point, { ...caller, role: 'Administrador' }),
+      service.create(point, { ...caller, role: 'Administrador Master' }),
     ).rejects.toThrow(ForbiddenException);
   });
 
