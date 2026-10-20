@@ -210,7 +210,7 @@ export default function CadastroFuncionario() {
             <Text style={styles.buttonText}>Cadastrar Colaborador</Text>
           )}
         </TouchableOpacity>
-      </View>
+      
 
       <TouchableOpacity
         style={styles.secondaryButton}
@@ -219,7 +219,8 @@ export default function CadastroFuncionario() {
         <Text style={styles.secondaryButtonText}>Voltar ao Dashboard</Text>
       </TouchableOpacity>
 
-      // Modal
+</View>
+          
       <FeedbackModal
         visible={feedback.visible}
         type={feedback.type}
@@ -315,23 +316,25 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: "#fff",
+    color: "#f7f7f7ff",
     fontSize: 15,
     fontWeight: "700",
   },
   secondaryButton: {
-    marginTop: 20,
+    backgroundColor: "#285A71",
+    borderRadius: 10,
     paddingVertical: 14,
+    marginTop: 20,
     alignItems: "center",
   },
   secondaryButtonText: {
-    color: "#285A71",
+    color: "#ffffffff",
     fontSize: 15,
     fontWeight: "600",
   },
   credentialsCard: {
     marginTop: 24,
-    backgroundColor: "#ECEFDA",
+    backgroundColor: "#ffffffff",
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
