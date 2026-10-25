@@ -1,4 +1,4 @@
-import { IsString, IsOptional, Length } from 'class-validator';
+import { IsString, IsOptional, Length, IsNumber } from 'class-validator';
 
 export class CreateOccurrenceDto {
   @IsOptional()
@@ -7,6 +7,10 @@ export class CreateOccurrenceDto {
 
   @IsOptional()
   @IsString()
-  @Length(1, 50)
+  @Length(1, 255)
   ocorrencias?: string;
+
+  @IsOptional()
+  @IsNumber()
+  fk_id_func?: number;
 }

@@ -8,7 +8,7 @@ export class Occurrence {
   @Column({ nullable: true })
   atestado_func: string;
 
-  @Column({ length: 50, nullable: true })
+  @Column({ length: 255, nullable: true })
   ocorrencias: string;
 
   @Column()

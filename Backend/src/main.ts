@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { json, urlencoded } from 'express';
+import * as express from 'express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 function validateRequiredEnv(config: ConfigService) {
@@ -34,6 +36,7 @@ async function bootstrap() {
 
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ limit: '10mb', extended: true }));
+  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
   app.enableCors();
   app.useGlobalPipes(
     new ValidationPipe({

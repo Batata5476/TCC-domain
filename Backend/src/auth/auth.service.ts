@@ -345,4 +345,32 @@ export class AuthService {
       message: 'Se o e-mail estiver cadastrado, as instruções foram enviadas.',
     };
   }
+
+  async verifyPassword(userId: number, senha: string) {
+    if (!senha) {
+      throw new BadRequestException('A senha é obrigatória.');
+    }
+
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.id = :id', { id: userId })
+      .addSelect('user.senha')
+      .getOne();
+
+    if (!user || !user.senha) {
+      throw new UnauthorizedException('Usuário não encontrado.');
+    }
+
+    const isPasswordValid = await bcrypt.compare(senha, user.senha);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Senha incorreta.');
+    }
+
+    return {
+      status: 'success',
+      message: 'Senha verificada com sucesso.',
+      valid: true,
+    };
+  }
 }
+

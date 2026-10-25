@@ -1,8 +1,11 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { UploadMediaDto } from './dto/upload-media.dto';
 import { Message } from './entities/message.entity';
 import { Chat } from './entities/chat.entity';
 import { ChatParticipant } from './entities/chat-participant.entity';
@@ -69,6 +72,7 @@ export class ChatService {
           id: u.id,
           name: u.nome,
           avatar: initials,
+          foto: u.foto_func || u.foto || null,
           online: u.status === 'ACTIVE',
           role: u.cargo || u.setor?.nome || u.role?.nome || 'Colaborador',
         };
@@ -130,12 +134,47 @@ export class ChatService {
           formattedTime = `${hours}:${minutes}`;
         }
 
+        const photo = other ? (other.foto_func || other.foto || null) : null;
+
+        const rawLastMsg = lastMsg ? lastMsg.conteudo_mensagens : 'Conversa iniciada';
+        let safeLastMessage = rawLastMsg;
+        if (safeLastMessage && safeLastMessage !== 'Conversa iniciada') {
+          if (
+            safeLastMessage === '🚫 Esta mensagem foi apagada' ||
+            safeLastMessage === '🚫 Você apagou esta mensagem'
+          ) {
+            safeLastMessage = '🚫 Mensagem apagada';
+          } else if (safeLastMessage.startsWith('📷 [Foto]') || safeLastMessage.startsWith('📷 Foto')) {
+            const parts = safeLastMessage.split(' - ');
+            const comment = parts.length > 1 ? parts.slice(1).join(' - ').trim() : null;
+            safeLastMessage = comment ? `📷 ${comment}` : '📷 Foto';
+          } else if (safeLastMessage.startsWith('📎 [Arquivo]') || safeLastMessage.startsWith('📎 Arquivo')) {
+            const parts = safeLastMessage.split(' - ');
+            const headerPart = parts[0];
+            const comment = parts.length > 1 ? parts.slice(1).join(' - ').trim() : null;
+            const fileRef = headerPart
+              .replace('📎 [Arquivo]', '')
+              .replace('📎 Arquivo', '')
+              .trim();
+            const fileName =
+              fileRef && !fileRef.startsWith('/uploads/') && !fileRef.startsWith('http')
+                ? fileRef.split('/').pop() || 'Documento'
+                : 'Documento';
+            safeLastMessage = comment ? `📎 ${fileName} • ${comment}` : `📎 ${fileName}`;
+          } else if (safeLastMessage.includes('/uploads/chat/')) {
+            safeLastMessage = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(safeLastMessage)
+              ? '📷 Foto'
+              : '📎 Arquivo';
+          }
+        }
+
         return {
           id: chatId,
           name,
           avatar: initials,
+          foto: photo,
           online: other ? other.status === 'ACTIVE' : false,
-          lastMessage: lastMsg ? lastMsg.conteudo_mensagens : 'Conversa iniciada',
+          lastMessage: safeLastMessage,
           time: formattedTime,
           unreadCount: 0,
           role: other ? (other.cargo || other.setor?.nome || 'Colaborador') : 'Chat',
@@ -266,8 +305,8 @@ export class ChatService {
     };
   }
 
-  // ─── Remover Mensagem ───────────────────────────────────────────────────────
-  async remove(id: number, caller: any) {
+  // ─── Remover Mensagem (Estilo WhatsApp) ────────────────────────────────────
+  async remove(id: number, caller: any, forEveryone = true) {
     const message = await this.messageRepository.findOne({
       where: { pk_id_mensagens: id },
     });
@@ -282,11 +321,48 @@ export class ChatService {
       throw new ForbiddenException('Você só pode remover mensagens enviadas por você');
     }
 
-    await this.messageRepository.remove(message);
+    if (forEveryone) {
+      message.conteudo_mensagens = '🚫 Esta mensagem foi apagada';
+      await this.messageRepository.save(message);
+    } else {
+      await this.messageRepository.remove(message);
+    }
 
     return {
       status: 'success',
-      message: 'Mensagem removida com sucesso',
+      message: 'Mensagem apagada com sucesso',
+    };
+  }
+
+  // ─── Upload de Mídia / Imagem do Chat ──────────────────────────────────────
+  async uploadMedia(dto: UploadMediaDto, caller: any) {
+    if (!dto.base64 || !dto.filename) {
+      throw new BadRequestException('Arquivo inválido ou base64 não fornecido');
+    }
+
+    const uploadDir = join(process.cwd(), 'uploads', 'chat');
+    if (!existsSync(uploadDir)) {
+      mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Limpa prefixos do tipo 'data:image/...;base64,' se presentes
+    const base64Data = dto.base64.replace(/^data:([A-Za-z-+/]+);base64,/, '');
+
+    const extMatch = dto.filename.match(/\.([a-zA-Z0-9]+)$/);
+    const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.jpg';
+    const safeName = `chat-${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`;
+    const filePath = join(uploadDir, safeName);
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    writeFileSync(filePath, buffer);
+
+    return {
+      status: 'success',
+      data: {
+        url: `/uploads/chat/${safeName}`,
+        filename: safeName,
+        originalName: dto.filename,
+      },
     };
   }
 }

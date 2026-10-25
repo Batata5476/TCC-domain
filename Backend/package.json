@@ -8,6 +8,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "db:setup": "node scripts/setup-local-db.js",
+    "demo:load": "node scripts/setup-demo-presentation.js",
+    "demo:clear": "node scripts/clear-demo-presentation.js",
     "start": "node dist/main",
     "start:dev": "ts-node -r tsconfig-paths/register src/main.ts",
     "start:prod": "node dist/main",

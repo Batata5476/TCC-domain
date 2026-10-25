@@ -56,23 +56,35 @@ return occurrence;
   }
     
   async create(createOccurrenceDto: CreateOccurrenceDto, caller: any) {
-    if (caller.role !== ROLES.EMPLOYEE) {
-      throw new ForbiddenException('Apenas funcionários podem registrar ocorrências médicas');
-    }
+    const isCompanyAdmin = isAdminRole(caller.role);
+    let targetFuncId = caller.sub;
 
-    const callerId = caller.sub;
+    if (isCompanyAdmin) {
+      if (!createOccurrenceDto.fk_id_func) {
+        throw new ForbiddenException('Informe o ID do colaborador para lançar a ocorrência');
+      }
+      const employee = await this.userRepository.findOne({
+        where: { id: createOccurrenceDto.fk_id_func },
+      });
+      if (!employee || employee.empresa_id !== caller.empresa_id) {
+        throw new ForbiddenException('Colaborador não pertence à sua empresa');
+      }
+      targetFuncId = createOccurrenceDto.fk_id_func;
+    } else if (caller.role !== ROLES.EMPLOYEE) {
+      throw new ForbiddenException('Você não possui permissão para registrar ocorrências');
+    }
 
     const occurrence = this.occurrenceRepository.create({
       atestado_func: createOccurrenceDto.atestado_func,
       ocorrencias: createOccurrenceDto.ocorrencias,
-      fk_id_func: callerId,
+      fk_id_func: targetFuncId,
     });
 
     const saved = await this.occurrenceRepository.save(occurrence);
 
     return {
       status: 'success',
-      message: 'Registro médico criado com sucesso',
+      message: 'Ocorrência registrada com sucesso',
       data: saved,
     };
   }

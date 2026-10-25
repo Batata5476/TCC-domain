@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, UseGuards, Req } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { UploadMediaDto } from './dto/upload-media.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -42,9 +43,20 @@ export class ChatController {
     return this.chatService.create(createMessageDto, req.user);
   }
 
+  @Post('upload')
+  @Permissions('chat.create')
+  uploadMedia(@Body() dto: UploadMediaDto, @Req() req) {
+    return this.chatService.uploadMedia(dto, req.user);
+  }
+
   @Delete(':id')
   @Permissions('chat.delete')
-  remove(@Param('id') id: string, @Req() req) {
-    return this.chatService.remove(+id, req.user);
+  remove(
+    @Param('id') id: string,
+    @Query('forEveryone') forEveryone: string,
+    @Req() req,
+  ) {
+    const isEveryone = forEveryone !== 'false';
+    return this.chatService.remove(+id, req.user, isEveryone);
   }
 }

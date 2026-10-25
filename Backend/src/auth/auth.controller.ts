@@ -1,10 +1,11 @@
-import { Controller, Post, Body, Ip, Headers } from '@nestjs/common';
+import { Controller, Post, Body, Ip, Headers, UseGuards, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Throttle } from '@nestjs/throttler'
 import { ValidateFirstAccessDto } from './dto/validate-first-access.dto';
 import { ActivateFirstAccessDto } from './dto/activate-first-access.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -48,5 +49,12 @@ export class AuthController {
     @Headers('user-agent') userAgent: string,
   ) {
     return this.authService.forgotPassword(dto, ip, userAgent);
+  }
+
+  // Validação de senha para ponto no PC / confirmação de identidade
+  @UseGuards(JwtAuthGuard)
+  @Post('verify-password')
+  async verifyPassword(@Body('senha') senha: string, @Req() req: any) {
+    return this.authService.verifyPassword(req.user.sub, senha);
   }
 }
