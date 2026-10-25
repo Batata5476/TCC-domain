@@ -15,7 +15,9 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { authenticatedFetch } from "../services/api";
@@ -79,6 +81,7 @@ type MeetingItem = {
 
 export default function Dashboard() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // Estados de UI
   const [open, setOpen] = useState(true);
@@ -125,7 +128,7 @@ export default function Dashboard() {
 
   // Datas dinâmicas
   const [datesList, setDatesList] = useState<
-    { label: string; dateString: string }[]
+    { label: string; weekday: string; day: string; dateString: string }[]
   >([]);
   const [selectedDateStr, setSelectedDateStr] = useState<string>("");
 
@@ -155,7 +158,8 @@ export default function Dashboard() {
   // ─── Gera os próximos 7 dias ───────────────────────────────────────────────
 
   useEffect(() => {
-    const list: { label: string; dateString: string }[] = [];
+    const list: { label: string; weekday: string; day: string; dateString: string }[] = [];
+    const diasSemana = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
     for (let i = 0; i < 7; i++) {
       const d = new Date();
@@ -164,11 +168,14 @@ export default function Dashboard() {
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
+      const weekday = i === 0 ? "HOJE" : diasSemana[d.getDay()];
 
       const dateString = `${year}-${month}-${day}`;
 
       list.push({
         label: `${day}/${month}`,
+        weekday,
+        day,
         dateString,
       });
     }
@@ -322,14 +329,14 @@ export default function Dashboard() {
 
         if (newStatus === 1) {
           Alert.alert(
-            "Parabéns! 🎉",
+            "Parabéns!",
             "Você concluiu a tarefa com sucesso e acumulou +100 pontos!"
           );
         } else {
           const label = newStatus === 2 ? "Em andamento" : "Pendente";
 
           Alert.alert(
-            "Status Atualizado 👏",
+            "Status Atualizado",
             `Status da tarefa alterado para: ${label}`
           );
         }
@@ -479,6 +486,7 @@ export default function Dashboard() {
         setMenuOpen(false);
 
         await fetchDashboard();
+        setActiveTab("Tarefas");
       } else {
         const err = await response.json().catch(() => ({}));
         setTaskError(err.message || "Erro ao criar tarefa.");
@@ -540,8 +548,9 @@ export default function Dashboard() {
 
         setMenuOpen(false);
 
-        // Atualiza a lista de reuniões
+        // Atualiza a lista de reuniões e muda para a aba de reuniões
         await fetchDashboard();
+        setActiveTab("Reuniões");
       } else {
         const err = await response.json().catch(() => ({}));
         setMeetingError(err.message || "Erro ao registrar a reunião.");
@@ -582,6 +591,9 @@ export default function Dashboard() {
         ),
       );
 
+      // Sincroniza dados com o servidor
+      fetchDashboard();
+
       const msg =
         newStatus === "AGENDADA"
           ? "Reunião aceita e agendada com sucesso!"
@@ -591,7 +603,7 @@ export default function Dashboard() {
               ? "Solicitação cancelada."
               : "Reunião concluída com sucesso!";
 
-      Alert.alert("Reunião Atualizada 👏", msg);
+      Alert.alert("Reunião Atualizada", msg);
     } catch (error) {
       Alert.alert(
         "Erro",
@@ -635,11 +647,9 @@ export default function Dashboard() {
   const day = String(now.getDate()).padStart(2, "0");
   const todayStr = `${year}-${month}-${day}`;
 
+  // Tarefas Pendentes / Atrasadas: tarefas anteriores a hoje que ainda não foram concluídas
   const pendingTasks = tasks.filter((t) => {
     if (t.status === 1) return false;
-
-    if (t.status === 3) return true;
-
     if (!t.dueDate) return false;
 
     const taskDateOnly =
@@ -647,7 +657,8 @@ export default function Dashboard() {
         ? t.dueDate.split("T")[0]
         : String(t.dueDate);
 
-    return taskDateOnly < todayStr;
+    // Só entra no card de pendentes/atrasadas se venceu antes de hoje e não está no dia selecionado
+    return taskDateOnly < todayStr && taskDateOnly !== selectedDateStr;
   });
 
   const completedTasks = tasks.filter((t) => t.status === 1);
@@ -658,6 +669,7 @@ export default function Dashboard() {
 
   const renderTask = (task: TaskItem) => {
     const isCompany = userType === "company";
+    const isUrgent = task.priority === 1;
 
     return (
       <View key={task.id} style={styles.taskItem}>
@@ -682,29 +694,42 @@ export default function Dashboard() {
           </Text>
         </View>
 
-        <View style={{ flex: 1 }}>
-          <Text
-            style={[
-              styles.taskName,
-              task.status === 1 && {
-                textDecorationLine: "line-through",
-                color: "#64748B",
-              },
-            ]}
-          >
-            {task.name}
-          </Text>
+        <View style={{ flex: 1, minWidth: 0, paddingRight: 6 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <View style={styles.taskBadgeTag}>
+              <Ionicons name="checkbox-outline" size={10} color="#285A71" />
+              <Text style={styles.taskBadgeTagText}>TAREFA</Text>
+            </View>
+            <Text
+              style={[
+                styles.taskName,
+                task.status === 1 && {
+                  textDecorationLine: "line-through",
+                  color: "#94A3B8",
+                },
+              ]}
+              numberOfLines={2}
+            >
+              {task.name}
+            </Text>
+            {isUrgent && task.status !== 1 && (
+              <View style={styles.urgentBadge}>
+                <Text style={styles.urgentBadgeText}>URGENTE</Text>
+              </View>
+            )}
+          </View>
 
           <Text
             style={{
-              fontSize: 10,
+              fontSize: 11,
+              fontWeight: "600",
               color:
                 task.status === 1
                   ? "#10B981"
                   : task.status === 2
                     ? "#D97706"
-                    : "#94A3B8",
-              marginTop: 1,
+                    : "#64748B",
+              marginTop: 3,
             }}
           >
             {task.status === 3
@@ -715,7 +740,12 @@ export default function Dashboard() {
           </Text>
         </View>
 
-        <Text style={styles.taskPoints}>{task.points}+</Text>
+        {Number(task.points) > 0 && (
+          <View style={styles.taskPointsBox}>
+            <Ionicons name="star" size={11} color="#16A34A" style={{ marginRight: 2 }} />
+            <Text style={styles.taskPoints}>+{task.points}</Text>
+          </View>
+        )}
 
         <View
           style={{
@@ -829,15 +859,22 @@ export default function Dashboard() {
           <Ionicons name="calendar" size={18} color="#285A71" />
         </View>
 
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text
-            style={[
-              styles.taskName,
-              isCompleted && { textDecorationLine: "line-through", color: "#64748B" },
-            ]}
-          >
-            {meeting.assunto_reuniao}
-          </Text>
+        <View style={{ flex: 1, minWidth: 0, paddingRight: 6 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+            <View style={styles.meetingBadgeTag}>
+              <Ionicons name="calendar-outline" size={10} color="#285A71" />
+              <Text style={styles.meetingBadgeTagText}>REUNIÃO</Text>
+            </View>
+            <Text
+              style={[
+                styles.taskName,
+                isCompleted && { textDecorationLine: "line-through", color: "#64748B" },
+              ]}
+              numberOfLines={2}
+            >
+              {meeting.assunto_reuniao}
+            </Text>
+          </View>
           <Text style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
             {rawDate} às {meeting.horario_reuniao?.substring(0, 5) || "--:--"}
             {meeting.solicitante?.nome ? ` • ${meeting.solicitante.nome}` : ""}
@@ -946,44 +983,68 @@ export default function Dashboard() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.logoBox}>
-          <Image
-            source={cooperaLogo}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+    <View style={styles.container}>
+      {/* Header com Saudação e Perfil com safe area para mobile */}
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop:
+              Platform.OS === "web"
+                ? 18
+                : Math.max(
+                    insets.top,
+                    Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 20
+                  ) + 10,
+            paddingHorizontal: Math.max(insets.left, insets.right, 20),
+          },
+        ]}
+      >
+        <View style={styles.headerLeft}>
+          <View style={styles.logoBox}>
+            <Image
+              source={cooperaLogo}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.headerGreeting}>
+            <Text style={styles.greetingTitle}>
+              Olá, {userData?.nome ? userData.nome.split(" ")[0] : "Bem-vindo"}
+            </Text>
+            <Text style={styles.greetingRole}>
+              {userType === "company" ? "Gestão Corporativa" : userData?.cargo || "Central de Atividades"}
+            </Text>
+          </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.headerAccountButton}
-          activeOpacity={0.8}
-          onPress={() => setAccountModalVisible(true)}
-        >
-          {userPhoto || userData?.foto ? (
-            <Image
-              source={{
-                uri: (userPhoto || userData?.foto) ?? undefined,
-              }}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-              }}
-            />
-          ) : (
-            <Ionicons
-              name="person"
-              size={26}
-              color="#94A3B8"
-            />
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.headerAccountButton}
+            activeOpacity={0.8}
+            onPress={() => setAccountModalVisible(true)}
+          >
+            {userPhoto || userData?.foto ? (
+              <Image
+                source={{
+                  uri: (userPhoto || userData?.foto) ?? undefined,
+                }}
+                style={styles.headerAvatar}
+              />
+            ) : (
+              <View style={styles.headerAvatarFallback}>
+                <Ionicons
+                  name="person"
+                  size={18}
+                  color="#285A71"
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Datas */}
+      {/* Seletor de Datas Dinâmicas com Dia da Semana */}
       <ScrollView
         style={styles.dateScroll}
         horizontal
@@ -991,31 +1052,35 @@ export default function Dashboard() {
         contentContainerStyle={styles.dateContainer}
       >
         {datesList.map((item, index) => {
-          const isSelected =
-            item.dateString === selectedDateStr;
+          const isSelected = item.dateString === selectedDateStr;
 
           return (
             <Pressable
               key={item.dateString}
               onHoverIn={() => setHoveredDate(index)}
               onHoverOut={() => setHoveredDate(null)}
-              onPress={() =>
-                setSelectedDateStr(item.dateString)
-              }
+              onPress={() => setSelectedDateStr(item.dateString)}
               style={[
                 styles.dateButton,
                 isSelected && styles.dateButtonSelected,
-                hoveredDate === index &&
-                styles.dateButtonHover,
+                hoveredDate === index && styles.dateButtonHover,
               ]}
             >
               <Text
                 style={[
-                  styles.dateText,
-                  isSelected && styles.dateTextSelected,
+                  styles.dateWeekday,
+                  isSelected && styles.dateWeekdaySelected,
                 ]}
               >
-                {item.label}
+                {item.weekday}
+              </Text>
+              <Text
+                style={[
+                  styles.dateDay,
+                  isSelected && styles.dateDaySelected,
+                ]}
+              >
+                {item.day}
               </Text>
             </Pressable>
           );
@@ -1028,46 +1093,88 @@ export default function Dashboard() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* ─── ABAS ─────────────────────────────────────────────────────── */}
-        <View style={styles.tabBar}>
+        {/* ─── ABAS COM DESIGN DE PÍLULA ELEGANTE ─────────────────────────── */}
+        <View style={styles.tabBarContainer}>
           <TouchableOpacity
             style={[
-              styles.tabButton,
-              activeTab === "Tarefas" &&
-              styles.tabButtonActive,
+              styles.tabPill,
+              activeTab === "Tarefas" && styles.tabPillActive,
             ]}
             onPress={() => setActiveTab("Tarefas")}
             activeOpacity={0.8}
           >
+            <Ionicons
+              name="checkbox-outline"
+              size={16}
+              color={activeTab === "Tarefas" ? "#285A71" : "#64748B"}
+              style={{ marginRight: 6 }}
+            />
             <Text
               style={[
                 styles.tabLabel,
-                activeTab === "Tarefas" &&
-                styles.tabLabelActive,
+                activeTab === "Tarefas" && styles.tabLabelActive,
               ]}
             >
               Tarefas
             </Text>
+            {activeTasks.length > 0 && (
+              <View
+                style={[
+                  styles.tabBadge,
+                  activeTab === "Tarefas" && styles.tabBadgeActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabBadgeText,
+                    activeTab === "Tarefas" && styles.tabBadgeTextActive,
+                  ]}
+                >
+                  {activeTasks.length}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
-              styles.tabButton,
-              activeTab === "Reuniões" &&
-              styles.tabButtonActive,
+              styles.tabPill,
+              activeTab === "Reuniões" && styles.tabPillActive,
             ]}
             onPress={() => setActiveTab("Reuniões")}
             activeOpacity={0.8}
           >
+            <Ionicons
+              name="calendar-outline"
+              size={16}
+              color={activeTab === "Reuniões" ? "#285A71" : "#64748B"}
+              style={{ marginRight: 6 }}
+            />
             <Text
               style={[
                 styles.tabLabel,
-                activeTab === "Reuniões" &&
-                styles.tabLabelActive,
+                activeTab === "Reuniões" && styles.tabLabelActive,
               ]}
             >
               Reuniões
             </Text>
+            {openMeetings.length > 0 && (
+              <View
+                style={[
+                  styles.tabBadge,
+                  activeTab === "Reuniões" && styles.tabBadgeActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabBadgeText,
+                    activeTab === "Reuniões" && styles.tabBadgeTextActive,
+                  ]}
+                >
+                  {openMeetings.length}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -1084,19 +1191,25 @@ export default function Dashboard() {
                 onPress={() => setOpen(!open)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cardTitle}>
-                  Tarefas Urgentes
-                </Text>
+                <View style={styles.cardTitleBox}>
+                  <View style={[styles.cardHeaderDot, { backgroundColor: "#DC2626" }]} />
+                  <Text style={styles.cardTitle}>Tarefas Urgentes</Text>
+                  {urgentTasks.length > 0 && (
+                    <View style={[styles.cardCountPill, { backgroundColor: "#FEE2E2" }]}>
+                      <Text style={[styles.cardCountText, { color: "#DC2626" }]}>
+                        {urgentTasks.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
-                <Ionicons
-                  name={
-                    open
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
-                  size={24}
-                  color="#285A71"
-                />
+                <View style={styles.chevronBox}>
+                  <Ionicons
+                    name={open ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color="#285A71"
+                  />
+                </View>
               </TouchableOpacity>
 
               {open && (
@@ -1107,7 +1220,6 @@ export default function Dashboard() {
                         size="small"
                         color="#285A71"
                       />
-
                       <Text style={styles.loadingLabel}>
                         Carregando dados
                       </Text>
@@ -1124,32 +1236,31 @@ export default function Dashboard() {
             </View>
 
             {/* Card Outras Tarefas */}
-            <View
-              style={[
-                styles.card,
-                styles.cardSpacing,
-              ]}
-            >
+            <View style={[styles.card, styles.cardSpacing]}>
               <TouchableOpacity
                 style={styles.cardHeader}
-                onPress={() =>
-                  setOtherOpen(!otherOpen)
-                }
+                onPress={() => setOtherOpen(!otherOpen)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cardTitle}>
-                  Outras Tarefas
-                </Text>
+                <View style={styles.cardTitleBox}>
+                  <View style={[styles.cardHeaderDot, { backgroundColor: "#285A71" }]} />
+                  <Text style={styles.cardTitle}>Outras Tarefas</Text>
+                  {otherTasks.length > 0 && (
+                    <View style={[styles.cardCountPill, { backgroundColor: "#E0EDF3" }]}>
+                      <Text style={[styles.cardCountText, { color: "#285A71" }]}>
+                        {otherTasks.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
-                <Ionicons
-                  name={
-                    otherOpen
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
-                  size={24}
-                  color="#285A71"
-                />
+                <View style={styles.chevronBox}>
+                  <Ionicons
+                    name={otherOpen ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color="#285A71"
+                  />
+                </View>
               </TouchableOpacity>
 
               {otherOpen && (
@@ -1166,32 +1277,31 @@ export default function Dashboard() {
             </View>
 
             {/* Card Tarefas Pendentes */}
-            <View
-              style={[
-                styles.card,
-                styles.cardSpacing,
-              ]}
-            >
+            <View style={[styles.card, styles.cardSpacing]}>
               <TouchableOpacity
                 style={styles.cardHeader}
-                onPress={() =>
-                  setPendingOpen(!pendingOpen)
-                }
+                onPress={() => setPendingOpen(!pendingOpen)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cardTitle}>
-                  Tarefas Pendentes
-                </Text>
+                <View style={styles.cardTitleBox}>
+                  <View style={[styles.cardHeaderDot, { backgroundColor: "#D97706" }]} />
+                  <Text style={styles.cardTitle}>Tarefas Pendentes</Text>
+                  {pendingTasks.length > 0 && (
+                    <View style={[styles.cardCountPill, { backgroundColor: "#FEF3C7" }]}>
+                      <Text style={[styles.cardCountText, { color: "#D97706" }]}>
+                        {pendingTasks.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
-                <Ionicons
-                  name={
-                    pendingOpen
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
-                  size={24}
-                  color="#285A71"
-                />
+                <View style={styles.chevronBox}>
+                  <Ionicons
+                    name={pendingOpen ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color="#285A71"
+                  />
+                </View>
               </TouchableOpacity>
 
               {pendingOpen && (
@@ -1208,32 +1318,31 @@ export default function Dashboard() {
             </View>
 
             {/* Card Tarefas Concluídas */}
-            <View
-              style={[
-                styles.card,
-                styles.cardSpacing,
-              ]}
-            >
+            <View style={[styles.card, styles.cardSpacing]}>
               <TouchableOpacity
                 style={styles.cardHeader}
-                onPress={() =>
-                  setCompletedOpen(!completedOpen)
-                }
+                onPress={() => setCompletedOpen(!completedOpen)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cardTitle}>
-                  Tarefas Concluídas
-                </Text>
+                <View style={styles.cardTitleBox}>
+                  <View style={[styles.cardHeaderDot, { backgroundColor: "#10B981" }]} />
+                  <Text style={styles.cardTitle}>Tarefas Concluídas</Text>
+                  {completedTasks.length > 0 && (
+                    <View style={[styles.cardCountPill, { backgroundColor: "#D1FAE5" }]}>
+                      <Text style={[styles.cardCountText, { color: "#059669" }]}>
+                        {completedTasks.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
-                <Ionicons
-                  name={
-                    completedOpen
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
-                  size={24}
-                  color="#285A71"
-                />
+                <View style={styles.chevronBox}>
+                  <Ionicons
+                    name={completedOpen ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color="#285A71"
+                  />
+                </View>
               </TouchableOpacity>
 
               {completedOpen && (
@@ -1259,8 +1368,20 @@ export default function Dashboard() {
           <>
             <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Reuniões em aberto</Text>
-                <Ionicons name="calendar-outline" size={24} color="#285A71" />
+                <View style={styles.cardTitleBox}>
+                  <View style={[styles.cardHeaderDot, { backgroundColor: "#285A71" }]} />
+                  <Text style={styles.cardTitle}>Reuniões em aberto</Text>
+                  {openMeetings.length > 0 && (
+                    <View style={[styles.cardCountPill, { backgroundColor: "#E0EDF3" }]}>
+                      <Text style={[styles.cardCountText, { color: "#285A71" }]}>
+                        {openMeetings.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.chevronBox}>
+                  <Ionicons name="calendar-outline" size={20} color="#285A71" />
+                </View>
               </View>
 
               <View style={styles.taskList}>
@@ -1283,12 +1404,25 @@ export default function Dashboard() {
                 onPress={() => setMeetingsCompletedOpen(!meetingsCompletedOpen)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cardTitle}>Reuniões concluídas</Text>
-                <Ionicons
-                  name={meetingsCompletedOpen ? "chevron-up" : "chevron-down"}
-                  size={24}
-                  color="#285A71"
-                />
+                <View style={styles.cardTitleBox}>
+                  <View style={[styles.cardHeaderDot, { backgroundColor: "#10B981" }]} />
+                  <Text style={styles.cardTitle}>Reuniões concluídas</Text>
+                  {completedMeetings.length > 0 && (
+                    <View style={[styles.cardCountPill, { backgroundColor: "#D1FAE5" }]}>
+                      <Text style={[styles.cardCountText, { color: "#059669" }]}>
+                        {completedMeetings.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.chevronBox}>
+                  <Ionicons
+                    name={meetingsCompletedOpen ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color="#285A71"
+                  />
+                </View>
               </TouchableOpacity>
 
               {meetingsCompletedOpen && (
@@ -1307,53 +1441,59 @@ export default function Dashboard() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* ─── Menu flutuante ─────────────────────────────────────────────── */}
+      {/* ─── Menu flutuante com Backdrop ─────────────────────────────────── */}
 
       {menuOpen && (
-        <View style={styles.dropupMenu}>
-          <TouchableOpacity
-            style={styles.menuCard}
-            activeOpacity={0.85}
-            onPress={() => {
-              setMenuOpen(false);
-              setTaskModalVisible(true);
-            }}
-          >
-            <Ionicons
-              name="star"
-              size={16}
-              color="#285A71"
-            />
-
-            <Text style={styles.menuText}>
-              Tarefa
-            </Text>
-          </TouchableOpacity>
-
-          {(userType === "company" || userType === "user") && (
+        <>
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => setMenuOpen(false)}
+          />
+          <View style={styles.dropupMenu}>
             <TouchableOpacity
-              style={[
-                styles.menuCard,
-                { marginTop: 8 },
-              ]}
+              style={styles.menuCard}
               activeOpacity={0.85}
               onPress={() => {
                 setMenuOpen(false);
-                setMeetingModalVisible(true);
+                setTaskModalVisible(true);
               }}
             >
               <Ionicons
-                name="calendar"
+                name="star"
                 size={16}
                 color="#285A71"
               />
 
               <Text style={styles.menuText}>
-                {userType === "company" ? "Reunião" : "Solicitar reunião"}
+                Tarefa
               </Text>
             </TouchableOpacity>
-          )}
-        </View>
+
+            {(userType === "company" || userType === "user") && (
+              <TouchableOpacity
+                style={[
+                  styles.menuCard,
+                  { marginTop: 8 },
+                ]}
+                activeOpacity={0.85}
+                onPress={() => {
+                  setMenuOpen(false);
+                  setMeetingModalVisible(true);
+                }}
+              >
+                <Ionicons
+                  name="calendar"
+                  size={16}
+                  color="#285A71"
+                />
+
+                <Text style={styles.menuText}>
+                  {userType === "company" ? "Reunião" : "Solicitar reunião"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </>
       )}
 
       <TouchableOpacity
@@ -1392,7 +1532,7 @@ export default function Dashboard() {
             color="#285A71"
           />
 
-          <Text style={styles.navLabel}>
+          <Text style={[styles.navLabel, { color: "#285A71" }]}>
             central
           </Text>
         </TouchableOpacity>
@@ -1407,10 +1547,10 @@ export default function Dashboard() {
           <Ionicons
             name="location"
             size={26}
-            color="#285A71"
+            color="#94A3B8"
           />
 
-          <Text style={styles.navLabel}>
+          <Text style={[styles.navLabel, { color: "#94A3B8" }]}>
             Ponto-E
           </Text>
         </TouchableOpacity>
@@ -1428,7 +1568,7 @@ export default function Dashboard() {
             color="#94A3B8"
           />
 
-          <Text style={styles.navLabel}>
+          <Text style={[styles.navLabel, { color: "#94A3B8" }]}>
             chats
           </Text>
         </TouchableOpacity>
@@ -1878,216 +2018,216 @@ export default function Dashboard() {
           >
             <View style={styles.taskModal}>
               <View style={styles.accountModalHeader}>
-              <Text style={styles.accountModalTitle}>
-                Nova Tarefa
-              </Text>
-
-              <TouchableOpacity
-                onPress={() =>
-                  setTaskModalVisible(false)
-                }
-              >
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color="#285A71"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={{ maxHeight: 420 }}
-              contentContainerStyle={{ paddingBottom: 10 }}
-            >
-            <Text style={styles.inputLabel}>
-              Título / Descrição
-            </Text>
-
-            <TextInput
-              style={styles.textInput}
-              placeholder="Ex: Enviar relatório do setor"
-              placeholderTextColor="#94A3B8"
-              value={taskTitle}
-              onChangeText={setTaskTitle}
-            />
-
-            {taskError ? (
-              <Text style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>
-                {taskError}
-              </Text>
-            ) : null}
-
-            <Text style={styles.inputLabel}>
-              Prioridade
-            </Text>
-
-            <View style={styles.optionRow}>
-              <TouchableOpacity
-                style={[
-                  styles.optionBtn,
-                  taskPriority === 1 &&
-                  styles.optionBtnUrgent,
-                ]}
-                onPress={() =>
-                  setTaskPriority(1)
-                }
-              >
-                <Text
-                  style={[
-                    styles.optionText,
-                    taskPriority === 1 &&
-                    styles.optionTextActive,
-                  ]}
-                >
-                  Urgente
+                <Text style={styles.accountModalTitle}>
+                  Nova Tarefa
                 </Text>
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.optionBtn,
-                  taskPriority === 2 &&
-                  styles.optionBtnNormal,
-                ]}
-                onPress={() =>
-                  setTaskPriority(2)
-                }
-              >
-                <Text
-                  style={[
-                    styles.optionText,
-                    taskPriority === 2 &&
-                    styles.optionTextActive,
-                  ]}
-                >
-                  Normal
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.inputLabel}>
-              Prazo
-            </Text>
-
-            <View style={styles.optionRow}>
-              {(
-                [
-                  { key: "hoje", label: "Hoje" },
-                  { key: "amanha", label: "Amanhã" },
-                  { key: "semana", label: "7 Dias" },
-                  { key: "outro", label: "Outra Data" },
-                ] as const
-              ).map(({ key, label }) => (
                 <TouchableOpacity
-                  key={key}
-                  style={[
-                    styles.optionBtn,
-                    taskDueDate === key && styles.optionBtnNormal,
-                  ]}
-                  onPress={() => setTaskDueDate(key)}
+                  onPress={() =>
+                    setTaskModalVisible(false)
+                  }
                 >
-                  <Text
+                  <Ionicons
+                    name="close"
+                    size={24}
+                    color="#285A71"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 420 }}
+                contentContainerStyle={{ paddingBottom: 10 }}
+              >
+                <Text style={styles.inputLabel}>
+                  Título / Descrição
+                </Text>
+
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Ex: Enviar relatório do setor"
+                  placeholderTextColor="#94A3B8"
+                  value={taskTitle}
+                  onChangeText={setTaskTitle}
+                />
+
+                {taskError ? (
+                  <Text style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>
+                    {taskError}
+                  </Text>
+                ) : null}
+
+                <Text style={styles.inputLabel}>
+                  Prioridade
+                </Text>
+
+                <View style={styles.optionRow}>
+                  <TouchableOpacity
                     style={[
-                      styles.optionText,
-                      taskDueDate === key && styles.optionTextActive,
+                      styles.optionBtn,
+                      taskPriority === 1 &&
+                      styles.optionBtnUrgent,
                     ]}
+                    onPress={() =>
+                      setTaskPriority(1)
+                    }
                   >
-                    {label}
+                    <Text
+                      style={[
+                        styles.optionText,
+                        taskPriority === 1 &&
+                        styles.optionTextActive,
+                      ]}
+                    >
+                      Urgente
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.optionBtn,
+                      taskPriority === 2 &&
+                      styles.optionBtnNormal,
+                    ]}
+                    onPress={() =>
+                      setTaskPriority(2)
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        taskPriority === 2 &&
+                        styles.optionTextActive,
+                      ]}
+                    >
+                      Normal
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.inputLabel}>
+                  Prazo
+                </Text>
+
+                <View style={styles.optionRow}>
+                  {(
+                    [
+                      { key: "hoje", label: "Hoje" },
+                      { key: "amanha", label: "Amanhã" },
+                      { key: "semana", label: "7 Dias" },
+                      { key: "outro", label: "Outra Data" },
+                    ] as const
+                  ).map(({ key, label }) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={[
+                        styles.optionBtn,
+                        taskDueDate === key && styles.optionBtnNormal,
+                      ]}
+                      onPress={() => setTaskDueDate(key)}
+                    >
+                      <Text
+                        style={[
+                          styles.optionText,
+                          taskDueDate === key && styles.optionTextActive,
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {taskDueDate === "outro" && (
+                  <View style={{ marginTop: 8 }}>
+                    <CalendarDatePicker
+                      value={customTaskDate}
+                      onChange={setCustomTaskDate}
+                      label="Data de Entrega da Tarefa"
+                    />
+                  </View>
+                )}
+
+                {userType === "company" && (
+                  <>
+                    <Text style={styles.inputLabel}>
+                      Atribuir Colaborador
+                    </Text>
+
+                    <ScrollView
+                      style={styles.employeeList}
+                      nestedScrollEnabled
+                    >
+                      {employees.map((emp) => {
+                        const sel =
+                          selectedEmployeeId === emp.id;
+
+                        return (
+                          <TouchableOpacity
+                            key={emp.id}
+                            style={[
+                              styles.employeeRow,
+                              sel &&
+                              styles.employeeRowActive,
+                            ]}
+                            onPress={() =>
+                              setSelectedEmployeeId(
+                                emp.id
+                              )
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.employeeText,
+                                sel &&
+                                styles.employeeTextActive,
+                              ]}
+                            >
+                              {emp.nome}
+                            </Text>
+
+                            {sel && (
+                              <Ionicons
+                                name="checkmark"
+                                size={16}
+                                color="#FFFFFF"
+                              />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </>
+                )}
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() =>
+                    setTaskModalVisible(false)
+                  }
+                >
+                  <Text style={styles.cancelBtnText}>
+                    Cancelar
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
 
-            {taskDueDate === "outro" && (
-              <View style={{ marginTop: 8 }}>
-                <CalendarDatePicker
-                  value={customTaskDate}
-                  onChange={setCustomTaskDate}
-                  label="Data de Entrega da Tarefa"
-                />
-              </View>
-            )}
-
-            {userType === "company" && (
-              <>
-                <Text style={styles.inputLabel}>
-                  Atribuir Colaborador
-                </Text>
-
-                <ScrollView
-                  style={styles.employeeList}
-                  nestedScrollEnabled
+                <TouchableOpacity
+                  style={[styles.saveBtn, creatingTask && { opacity: 0.6 }]}
+                  onPress={handleCreateTask}
+                  disabled={creatingTask}
                 >
-                  {employees.map((emp) => {
-                    const sel =
-                      selectedEmployeeId === emp.id;
-
-                    return (
-                      <TouchableOpacity
-                        key={emp.id}
-                        style={[
-                          styles.employeeRow,
-                          sel &&
-                          styles.employeeRowActive,
-                        ]}
-                        onPress={() =>
-                          setSelectedEmployeeId(
-                            emp.id
-                          )
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.employeeText,
-                            sel &&
-                            styles.employeeTextActive,
-                          ]}
-                        >
-                          {emp.nome}
-                        </Text>
-
-                        {sel && (
-                          <Ionicons
-                            name="checkmark"
-                            size={16}
-                            color="#FFFFFF"
-                          />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </>
-            )}
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() =>
-                  setTaskModalVisible(false)
-                }
-              >
-                <Text style={styles.cancelBtnText}>
-                  Cancelar
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.saveBtn, creatingTask && { opacity: 0.6 }]}
-                onPress={handleCreateTask}
-                disabled={creatingTask}
-              >
-                {creatingTask ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Criar Tarefa</Text>
-                )}
-              </TouchableOpacity>
+                  {creatingTask ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Criar Tarefa</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -2133,169 +2273,169 @@ export default function Dashboard() {
                 contentContainerStyle={{ paddingBottom: 10 }}
               >
 
-            <Text style={styles.inputLabel}>
-              Assunto da Reunião
-            </Text>
-
-            <TextInput
-              style={styles.textInput}
-              placeholder="Ex: Alinhamento Estratégico do Trimestre"
-              placeholderTextColor="#94A3B8"
-              value={meetingSubject}
-              onChangeText={(value) => {
-                setMeetingSubject(value);
-                setMeetingError("");
-              }}
-            />
-
-            {/* Calendário Interativo */}
-            <CalendarDatePicker
-              value={meetingDate}
-              onChange={setMeetingDate}
-              label="Data da Reunião"
-            />
-
-            {/* Seletor Numérico de Horário */}
-            <TimePickerInput
-              value={meetingTime}
-              onChange={setMeetingTime}
-              label="Horário da Reunião"
-            />
-
-            <Text style={styles.inputLabel}>Link da reunião (opcional)</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="https://meet.google.com/..."
-              placeholderTextColor="#94A3B8"
-              value={meetingLink}
-              onChangeText={(value) => {
-                setMeetingLink(value);
-                setMeetingError("");
-              }}
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            {meetingError ? (
-              <Text style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>
-                {meetingError}
-              </Text>
-            ) : null}
-
-            {userType === "company" ? (
-              <Text style={styles.inputLabel}>Convidar Participantes</Text>
-            ) : null}
-
-            {userType === "company" ? <ScrollView
-              style={styles.employeeList}
-              nestedScrollEnabled
-            >
-              {employees.length === 0 ? (
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: "#94A3B8",
-                    textAlign: "center",
-                    marginVertical: 10,
-                  }}
-                >
-                  Nenhum colaborador encontrado
+                <Text style={styles.inputLabel}>
+                  Assunto da Reunião
                 </Text>
-              ) : (
-                employees.map((emp) => {
-                  const isSelected =
-                    selectedMeetingEmployeeIds.includes(
-                      emp.id
-                    );
 
-                  return (
-                    <TouchableOpacity
-                      key={emp.id}
-                      style={[
-                        styles.employeeRow,
-                        isSelected &&
-                        styles.employeeRowActive,
-                      ]}
-                      onPress={() => {
-                        if (isSelected) {
-                          setSelectedMeetingEmployeeIds(
-                            (prev) =>
-                              prev.filter(
-                                (id) =>
-                                  id !== emp.id
-                              )
-                          );
-                        } else {
-                          setSelectedMeetingEmployeeIds(
-                            (prev) => [
-                              ...prev,
-                              emp.id,
-                            ]
-                          );
-                        }
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Ex: Alinhamento Estratégico do Trimestre"
+                  placeholderTextColor="#94A3B8"
+                  value={meetingSubject}
+                  onChangeText={(value) => {
+                    setMeetingSubject(value);
+                    setMeetingError("");
+                  }}
+                />
+
+                {/* Calendário Interativo */}
+                <CalendarDatePicker
+                  value={meetingDate}
+                  onChange={setMeetingDate}
+                  label="Data da Reunião"
+                />
+
+                {/* Seletor Numérico de Horário */}
+                <TimePickerInput
+                  value={meetingTime}
+                  onChange={setMeetingTime}
+                  label="Horário da Reunião"
+                />
+
+                <Text style={styles.inputLabel}>Link da reunião (opcional)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="https://meet.google.com/..."
+                  placeholderTextColor="#94A3B8"
+                  value={meetingLink}
+                  onChangeText={(value) => {
+                    setMeetingLink(value);
+                    setMeetingError("");
+                  }}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                {meetingError ? (
+                  <Text style={{ color: "#DC2626", fontSize: 12, marginTop: 6 }}>
+                    {meetingError}
+                  </Text>
+                ) : null}
+
+                {userType === "company" ? (
+                  <Text style={styles.inputLabel}>Convidar Participantes</Text>
+                ) : null}
+
+                {userType === "company" ? <ScrollView
+                  style={styles.employeeList}
+                  nestedScrollEnabled
+                >
+                  {employees.length === 0 ? (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: "#94A3B8",
+                        textAlign: "center",
+                        marginVertical: 10,
                       }}
                     >
-                      <Text
-                        style={[
-                          styles.employeeText,
-                          isSelected &&
-                          styles.employeeTextActive,
-                        ]}
-                      >
-                        {emp.nome}
-                      </Text>
+                      Nenhum colaborador encontrado
+                    </Text>
+                  ) : (
+                    employees.map((emp) => {
+                      const isSelected =
+                        selectedMeetingEmployeeIds.includes(
+                          emp.id
+                        );
 
-                      {isSelected && (
-                        <Ionicons
-                          name="checkmark"
-                          size={16}
-                          color="#FFFFFF"
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-            </ScrollView> : null}
-            </ScrollView>
+                      return (
+                        <TouchableOpacity
+                          key={emp.id}
+                          style={[
+                            styles.employeeRow,
+                            isSelected &&
+                            styles.employeeRowActive,
+                          ]}
+                          onPress={() => {
+                            if (isSelected) {
+                              setSelectedMeetingEmployeeIds(
+                                (prev) =>
+                                  prev.filter(
+                                    (id) =>
+                                      id !== emp.id
+                                  )
+                              );
+                            } else {
+                              setSelectedMeetingEmployeeIds(
+                                (prev) => [
+                                  ...prev,
+                                  emp.id,
+                                ]
+                              );
+                            }
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.employeeText,
+                              isSelected &&
+                              styles.employeeTextActive,
+                            ]}
+                          >
+                            {emp.nome}
+                          </Text>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() =>
-                  setMeetingModalVisible(false)
-                }
-                disabled={creatingMeeting}
-              >
-                <Text style={styles.cancelBtnText}>
-                  Cancelar
-                </Text>
-              </TouchableOpacity>
+                          {isSelected && (
+                            <Ionicons
+                              name="checkmark"
+                              size={16}
+                              color="#FFFFFF"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </ScrollView> : null}
+              </ScrollView>
 
-              <TouchableOpacity
-                style={[
-                  styles.saveBtn,
-                  creatingMeeting && {
-                    opacity: 0.6,
-                  },
-                ]}
-                onPress={handleCreateMeeting}
-                disabled={creatingMeeting}
-              >
-                {creatingMeeting ? (
-                  <ActivityIndicator
-                    color="#FFFFFF"
-                    size="small"
-                  />
-                ) : (
-                  <Text style={styles.saveBtnText}>
-                    {userType === "company" ? "Agendar Reunião" : "Enviar solicitação"}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() =>
+                    setMeetingModalVisible(false)
+                  }
+                  disabled={creatingMeeting}
+                >
+                  <Text style={styles.cancelBtnText}>
+                    Cancelar
                   </Text>
-                )}
-              </TouchableOpacity>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.saveBtn,
+                    creatingMeeting && {
+                      opacity: 0.6,
+                    },
+                  ]}
+                  onPress={handleCreateMeeting}
+                  disabled={creatingMeeting}
+                >
+                  {creatingMeeting ? (
+                    <ActivityIndicator
+                      color="#FFFFFF"
+                      size="small"
+                    />
+                  ) : (
+                    <Text style={styles.saveBtnText}>
+                      {userType === "company" ? "Agendar Reunião" : "Enviar solicitação"}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -2332,9 +2472,10 @@ export default function Dashboard() {
 
             <TouchableOpacity
               style={styles.successButton}
-              onPress={() =>
-                setMeetingSuccessVisible(false)
-              }
+              onPress={() => {
+                setMeetingSuccessVisible(false);
+                setActiveTab("Reuniões");
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.successButtonText}>
@@ -2344,7 +2485,7 @@ export default function Dashboard() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -2357,78 +2498,166 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingBottom: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
 
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+
   logoBox: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#ECEFD9",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DCE3BE",
   },
 
   logo: {
     width: 28,
     height: 28,
-    tintColor: "#66B300",
+    tintColor: "#4E8752",
+  },
+
+  headerGreeting: {
+    justifyContent: "center",
+  },
+
+  greetingTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#285A71",
+  },
+
+  greetingRole: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 1,
+  },
+
+  headerRight: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  pointsPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+
+  pointsPillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#B45309",
   },
 
   headerAccountButton: {
-    padding: 10,
+    padding: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  headerAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+    borderColor: "#285A71",
+  },
+
+  headerAvatarFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#ECEFD9",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#DCE3BE",
   },
 
   dateScroll: {
     flexGrow: 0,
     flexShrink: 0,
-    height: 70,
-    maxHeight: 70,
+    height: 76,
+    maxHeight: 76,
   },
 
   dateContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    gap: 12,
+    paddingVertical: 6,
+    gap: 10,
+    alignItems: "center",
   },
 
   dateButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    width: 70,
-    height: 50,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    width: 62,
+    height: 60,
     backgroundColor: "#ECEFD9",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#D8DFBC",
+    shadowColor: "#285A71",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
 
   dateButtonSelected: {
     backgroundColor: "#285A71",
-  },
-
-  dateButtonHover: {
-    transform: [{ translateY: -4 }],
+    borderColor: "#285A71",
     shadowColor: "#285A71",
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
 
-  dateText: {
-    fontSize: 12,
-    fontWeight: "600",
+  dateButtonHover: {
+    transform: [{ translateY: -3 }],
+    elevation: 4,
+  },
+
+  dateWeekday: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#477387",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+
+  dateWeekdaySelected: {
+    color: "#A2C3D3",
+  },
+
+  dateDay: {
+    fontSize: 18,
+    fontWeight: "800",
     color: "#285A71",
   },
 
-  dateTextSelected: {
+  dateDaySelected: {
     color: "#FFFFFF",
   },
 
@@ -2439,57 +2668,88 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: 20,
     paddingTop: 10,
-    marginTop: 10,
+    marginTop: 4,
   },
 
-  // ─── Abas ─────────────────────────────────────────────────────────────
+  // ─── Abas com Design de Pílula ──────────────────────────────────────────
 
-  tabBar: {
+  tabBarContainer: {
     flexDirection: "row",
-    marginBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#EFF3DE",
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#D8DFBC",
   },
 
-  tabButton: {
+  tabPill: {
     flex: 1,
-    paddingVertical: 12,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 12,
   },
 
-  tabButtonActive: {
-    borderBottomWidth: 3,
-    borderBottomColor: "#285A71",
+  tabPillActive: {
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#285A71",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
 
   tabLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
-    color: "#94A3B8",
+    color: "#64748B",
   },
 
   tabLabelActive: {
     color: "#285A71",
   },
 
+  tabBadge: {
+    backgroundColor: "#DCE3BE",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginLeft: 6,
+  },
+
+  tabBadgeActive: {
+    backgroundColor: "#E2EEF4",
+  },
+
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#477387",
+  },
+
+  tabBadgeTextActive: {
+    color: "#285A71",
+  },
+
+  // ─── Cards ────────────────────────────────────────────────────────────
+
   card: {
     backgroundColor: "#ECEFD9",
-    borderRadius: 20,
-    borderColor: "#000000",
-    borderWidth: 0.5,
-    padding: 20,
+    borderRadius: 22,
+    borderColor: "#D2DBB2",
+    borderWidth: 1,
+    padding: 18,
     shadowColor: "#285A71",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
 
   cardSpacing: {
-    marginTop: 18,
+    marginTop: 16,
   },
 
   cardHeader: {
@@ -2498,70 +2758,177 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  cardTitleBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  cardHeaderDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
   cardTitle: {
-    fontSize: 22,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
     color: "#285A71",
   },
 
+  cardCountPill: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+
+  cardCountText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  chevronBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   taskList: {
-    marginTop: 20,
-    gap: 14,
+    marginTop: 16,
+    gap: 12,
   },
 
   taskItem: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    padding: 14,
-    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E6ECDD",
+    shadowColor: "#285A71",
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
 
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "#285A71",
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: 8,
+    marginRight: 10,
   },
 
   avatarText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "800",
   },
 
   taskName: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E293B",
+    lineHeight: 18,
+  },
+
+  urgentBadge: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: "#FECACA",
+  },
+
+  urgentBadgeText: {
+    color: "#DC2626",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+
+  taskBadgeTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#E0EDF3",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: "#CCE3ED",
+  },
+  taskBadgeTagText: {
+    fontSize: 9,
+    fontWeight: "800",
     color: "#285A71",
+    letterSpacing: 0.3,
+  },
+
+  meetingBadgeTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#ECEFD9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: "#D4DCB3",
+  },
+  meetingBadgeTagText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#285A71",
+    letterSpacing: 0.3,
+  },
+
+  taskPointsBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0FDF4",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#DCFCE7",
+    marginRight: 4,
   },
 
   taskPoints: {
-    marginRight: 12,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#388E3C",
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#16A34A",
   },
 
   checkButton: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "#285A71",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
 
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 24,
+    borderRadius: 3,
     backgroundColor: "#16A34A",
-    marginRight: 4,
   },
 
   loadingRow: {
@@ -2613,11 +2980,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  menuBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "transparent",
+    zIndex: 98,
+  },
+
   dropupMenu: {
     position: "absolute",
     right: 24,
-    bottom: 200,
+    bottom: 170,
     alignItems: "flex-end",
+    zIndex: 99,
   },
 
   menuCard: {
@@ -2630,14 +3008,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    shadowColor: "#285A71",
-    shadowOpacity: 0.12,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.15,
     shadowRadius: 10,
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    elevation: 5,
+    elevation: 6,
   },
 
   menuText: {
@@ -2649,22 +3027,22 @@ const styles = StyleSheet.create({
   floatingButton: {
     position: "absolute",
     right: 24,
-    bottom: 115,
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    bottom: 96,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: "#285A71",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#285A71",
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    marginBottom: 10,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 4,
     },
     elevation: 8,
+    zIndex: 100,
   },
 
   floatingButtonActive: {
@@ -2680,6 +3058,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     alignItems: "center",
     paddingBottom: 10,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
 
   navButton: {
@@ -2693,7 +3076,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     fontWeight: "700",
-    color: "#285A71",
+    color: "#94A3B8",
   },
 
   // ─── Modais ──────────────────────────────────────────────────────────

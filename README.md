@@ -3,6 +3,30 @@
 > API RESTful desenvolvida com **NestJS** para o sistema de gestão corporativa ATCC.
 > Projeto de TCC — Arquitetura modular, escalável e orientada a boas práticas.
 
+## Início Rápido (Windows)
+
+Abra um terminal na pasta `tcc` e rode:
+
+```powershell
+npm run setup
+npm run db:setup
+npm run check
+```
+
+`setup` instala as versões registradas nos lockfiles. `db:setup` aplica as migrações locais de permissões, GPS e reuniões, sem apagar registros. `check` compila o backend, executa os testes e verifica os tipos do frontend. O banco deve existir antes de rodar `db:setup`.
+
+Para testar a aplicação, use dois terminais na pasta `tcc`:
+
+```powershell
+npm run backend
+```
+
+```powershell
+npm run frontend
+```
+
+O backend precisa de PostgreSQL ativo e `Backend/.env` configurado; use `Backend/.env.example` como referência em uma máquina nova. Para abrir a versão web, use `npm run web`. O app aponta por padrão para `http://localhost:3000`; em um celular físico, configure `EXPO_PUBLIC_API_URL` com o IP local deste computador.
+
 ---
 
 ## 🚀 Tecnologias

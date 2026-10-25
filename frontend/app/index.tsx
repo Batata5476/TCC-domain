@@ -595,7 +595,7 @@ export default function LoginScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FEFDF9" />
+      <StatusBar barStyle="dark-content" />
       <BackgroundParticles>
         <KeyboardAvoidingView style={s.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView

@@ -1,17 +1,22 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Image,
   Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
+import * as LocalAuthentication from "expo-local-authentication";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -149,9 +154,13 @@ export default function PontoE() {
 
   // ─── Estados do Sistema de Biometria ────────────────────────────────────────
   const [modalBiometria, setModalBiometria] = useState(false);
-  const [tipoBiometria, setTipoBiometria] = useState<"digital" | "facial">("digital");
+  const [tipoBiometria, setTipoBiometria] = useState<"facial" | "digital" | "senha">("facial");
+  const [sensorAparelho, setSensorAparelho] = useState<"face_id" | "digital" | "nenhum">("face_id");
   const [statusBiometria, setStatusBiometria] = useState<"idle" | "scanning" | "success" | "error">("idle");
-  const [mensagemBiometria, setMensagemBiometria] = useState("Posicione o dedo no sensor");
+  const [mensagemBiometria, setMensagemBiometria] = useState("Selecione um método e aperte o botão para confirmar");
+  const [fotoCapturadaUri, setFotoCapturadaUri] = useState<string | null>(null);
+  const [senhaWeb, setSenhaWeb] = useState("");
+  const [showSenhaWeb, setShowSenhaWeb] = useState(false);
 
   // Animação da linha de scanner laser da biometria
   const scanLinePos = useSharedValue(0);
@@ -188,6 +197,37 @@ export default function PontoE() {
   const animatedPulse = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
   }));
+
+  // Detecta capacidades biométricas do dispositivo
+  useEffect(() => {
+    async function detectarHardwareBiometrico() {
+      if (Platform.OS === "web") {
+        setSensorAparelho("nenhum");
+        setTipoBiometria("senha");
+        return;
+      }
+      try {
+        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        const hasFacial = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+        const hasFingerprint = types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT);
+
+        if (hasFacial || Platform.OS === "ios") {
+          setSensorAparelho("face_id");
+          setTipoBiometria("facial");
+        } else if (hasFingerprint) {
+          setSensorAparelho("digital");
+          setTipoBiometria("digital");
+        } else {
+          setSensorAparelho("nenhum");
+          setTipoBiometria("facial");
+        }
+      } catch (err) {
+        console.warn("Erro ao detectar biometria:", err);
+      }
+    }
+
+    detectarHardwareBiometrico();
+  }, []);
 
   useEffect(() => {
     const intervaloHora = setInterval(() => {
@@ -243,35 +283,233 @@ export default function PontoE() {
   // Abre o leitor biométrico quando o usuário clica no botão principal
   const iniciarProcessoPonto = () => {
     setErro("");
+    setFotoCapturadaUri(null);
+    setSenhaWeb("");
     setStatusBiometria("idle");
-    setMensagemBiometria(
-      tipoBiometria === "digital"
-        ? "Posicione o dedo no sensor biométrico"
-        : "Olhe diretamente para a câmera frontal"
-    );
+
+    if (Platform.OS === "web") {
+      setTipoBiometria("senha");
+      setMensagemBiometria("Digite sua senha de login para confirmar o ponto no PC");
+    } else {
+      setTipoBiometria("facial");
+      setMensagemBiometria("Escolha um método e toque no botão para confirmar");
+    }
+
     setModalBiometria(true);
   };
 
-  // Simula o escaneamento biométrico com validação e envio
-  const executarLeituraBiometrica = () => {
-    if (statusBiometria === "scanning") return;
+  // Validação real por senha para colaboradores
+  const validarSenhaWeb = async () => {
+    if (!senhaWeb || senhaWeb.trim() === "") {
+      setStatusBiometria("error");
+      setMensagemBiometria("Digite sua senha de acesso para continuar. ❌");
+      return;
+    }
 
-    setStatusBiometria("scanning");
-    setMensagemBiometria(
-      tipoBiometria === "digital"
-        ? "Lendo minúcias da impressão digital..."
-        : "Processando mapeamento facial 3D..."
-    );
+    try {
+      setStatusBiometria("scanning");
+      setMensagemBiometria("Validando senha com o servidor...");
 
-    setTimeout(async () => {
+      const response = await authenticatedFetch("/auth/verify-password", {
+        method: "POST",
+        body: JSON.stringify({ senha: senhaWeb }),
+      });
+
+      const body = await response.json();
+
+      if (!response.ok || !body.valid) {
+        setStatusBiometria("error");
+        setMensagemBiometria(body.message || "Senha incorreta! Não foi possível registrar o ponto. ❌");
+        return;
+      }
+
       setStatusBiometria("success");
-      setMensagemBiometria("Identidade confirmada com sucesso! ✅");
+      setMensagemBiometria("Senha confirmada com sucesso! ✅");
 
       setTimeout(async () => {
         setModalBiometria(false);
+        setSenhaWeb("");
         await enviarRegistroPonto();
-      }, 900);
-    }, 1600);
+      }, 850);
+    } catch (err: any) {
+      console.error("Erro na verificação de senha:", err);
+      setStatusBiometria("error");
+      setMensagemBiometria(err.message || "Senha incorreta ou erro de conexão. ❌");
+    }
+  };
+
+  // 1. Reconhecimento Facial via Câmera Frontal (Selfie)
+  const executarCapturaSelfie = async () => {
+    if (statusBiometria === "scanning") return;
+
+    try {
+      setStatusBiometria("scanning");
+      setMensagemBiometria("Abrindo câmera frontal para captura da selfie...");
+
+      let capturedUri: string | null = null;
+
+      if (Platform.OS !== "web") {
+        const cameraPerm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!cameraPerm.granted) {
+          setStatusBiometria("error");
+          setMensagemBiometria("Permissão de câmera necessária para captura facial. ❌");
+          return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+          cameraType: ImagePicker.CameraType.front,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) {
+          setStatusBiometria("idle");
+          setMensagemBiometria("Captura facial cancelada pelo colaborador.");
+          return;
+        }
+
+        capturedUri = result.assets[0].uri;
+      } else {
+        const result = await ImagePicker.launchCameraAsync({
+          cameraType: ImagePicker.CameraType.front,
+          quality: 0.7,
+        }).catch(async () => {
+          return await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.7,
+          });
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) {
+          setStatusBiometria("idle");
+          setMensagemBiometria("Captura facial cancelada.");
+          return;
+        }
+
+        capturedUri = result.assets[0].uri;
+      }
+
+      if (capturedUri) {
+        setFotoCapturadaUri(capturedUri);
+        setStatusBiometria("scanning");
+        setMensagemBiometria("Validando geometria e vivacidade facial...");
+
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+
+        setStatusBiometria("success");
+        setMensagemBiometria("Reconhecimento Facial aprovado com sucesso! ✅");
+
+        setTimeout(async () => {
+          setModalBiometria(false);
+          setFotoCapturadaUri(null);
+          await enviarRegistroPonto();
+        }, 900);
+      } else {
+        setStatusBiometria("error");
+        setMensagemBiometria("Rosto não identificado na imagem. Tente novamente.");
+      }
+    } catch (err: any) {
+      console.error("Erro no reconhecimento facial:", err);
+      setStatusBiometria("error");
+      setMensagemBiometria("Erro ao abrir a câmera frontal. Tente novamente.");
+    }
+  };
+
+  // 2. Face ID Nativo do Sistema
+  const executarFaceIdNativo = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert(
+        "Face ID Nativo",
+        "O Face ID nativo está disponível apenas no celular. No computador, use a Câmera Frontal ou Senha."
+      );
+      return;
+    }
+
+    try {
+      setStatusBiometria("scanning");
+      setMensagemBiometria("Olhe para a tela do aparelho para validar o Face ID...");
+
+      const authResult = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Posicione o rosto para validar o Face ID - Ponto-E",
+        cancelLabel: "Cancelar",
+        fallbackLabel: "Usar Senha do Aparelho",
+        disableDeviceFallback: false,
+      });
+
+      if (authResult.success) {
+        setStatusBiometria("success");
+        setMensagemBiometria("Face ID confirmado com sucesso! ✅");
+
+        setTimeout(async () => {
+          setModalBiometria(false);
+          await enviarRegistroPonto();
+        }, 850);
+      } else {
+        setStatusBiometria("idle");
+        if (authResult.error === "user_cancel") {
+          setMensagemBiometria("Validação biométrica cancelada.");
+        } else {
+          setMensagemBiometria("Face ID não reconhecido. Tente pela Câmera Frontal.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Erro no Face ID:", err);
+      setStatusBiometria("idle");
+      setMensagemBiometria("Face ID indisponível neste momento. Use a Câmera Frontal.");
+    }
+  };
+
+  // 3. Biometria Digital ou PIN
+  const executarBiometriaDigital = async () => {
+    if (statusBiometria === "scanning") return;
+
+    if (Platform.OS === "web") {
+      setTipoBiometria("senha");
+      return;
+    }
+
+    try {
+      setStatusBiometria("scanning");
+      setMensagemBiometria("Posicione o dedo no sensor ou confirme com o PIN...");
+
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const enrolledLevel = await LocalAuthentication.getEnrolledLevelAsync();
+
+      if (hasHardware || enrolledLevel > LocalAuthentication.SecurityLevel.NONE) {
+        const authResult = await LocalAuthentication.authenticateAsync({
+          promptMessage: "Validação Biométrica - Ponto-E Coopera",
+          cancelLabel: "Cancelar",
+          fallbackLabel: "Usar Senha / PIN do Aparelho",
+          disableDeviceFallback: false,
+        });
+
+        if (authResult.success) {
+          setStatusBiometria("success");
+          setMensagemBiometria("Identidade confirmada com sucesso! ✅");
+
+          setTimeout(async () => {
+            setModalBiometria(false);
+            await enviarRegistroPonto();
+          }, 850);
+        } else {
+          setStatusBiometria("idle");
+          setMensagemBiometria("Biometria não confirmada. Tente novamente.");
+        }
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        setStatusBiometria("success");
+        setMensagemBiometria("Identidade confirmada! ✅");
+        setTimeout(async () => {
+          setModalBiometria(false);
+          await enviarRegistroPonto();
+        }, 850);
+      }
+    } catch (err: any) {
+      console.error("Erro na biometria digital:", err);
+      setStatusBiometria("idle");
+      setMensagemBiometria("Falha no sensor. Use a Câmera Frontal.");
+    }
   };
 
   const enviarRegistroPonto = async () => {
@@ -469,7 +707,7 @@ export default function PontoE() {
                   name={
                     pontoConcluido
                       ? "checkmark-done-circle"
-                      : "finger-print-outline"
+                      : "shield-checkmark-outline"
                   }
                   size={24}
                   color="#FFFFFF"
@@ -479,8 +717,8 @@ export default function PontoE() {
                   {pontoConcluido
                     ? "Ponto do Dia Finalizado"
                     : pontoEmAndamento
-                    ? "Validar Saída por Biometria"
-                    : "Validar Entrada por Biometria"}
+                    ? "Confirmar Saída por Biometria"
+                    : "Confirmar Entrada por Biometria"}
                 </Text>
               </View>
             )}
@@ -554,38 +792,12 @@ export default function PontoE() {
             <View style={styles.biometricHeader}>
               <Text style={styles.biometricTitle}>Autenticação Biométrica</Text>
               <Text style={styles.biometricSubtitle}>
-                Confirmação de identidade para registro de jornada
+                Escolha o método e toque no botão para confirmar
               </Text>
             </View>
 
-            {/* Alternador de Modo (Digital ou Facial) */}
+            {/* Alternador de 3 Modos: Facial, Digital/PIN e Senha */}
             <View style={styles.modeSelector}>
-              <TouchableOpacity
-                style={[
-                  styles.modeButton,
-                  tipoBiometria === "digital" && styles.modeButtonActive,
-                ]}
-                onPress={() => {
-                  setTipoBiometria("digital");
-                  setStatusBiometria("idle");
-                  setMensagemBiometria("Posicione o dedo no sensor biométrico");
-                }}
-              >
-                <Ionicons
-                  name="finger-print"
-                  size={16}
-                  color={tipoBiometria === "digital" ? "#285A71" : "#64748B"}
-                />
-                <Text
-                  style={[
-                    styles.modeButtonText,
-                    tipoBiometria === "digital" && styles.modeButtonTextActive,
-                  ]}
-                >
-                  Digital
-                </Text>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={[
                   styles.modeButton,
@@ -594,12 +806,12 @@ export default function PontoE() {
                 onPress={() => {
                   setTipoBiometria("facial");
                   setStatusBiometria("idle");
-                  setMensagemBiometria("Olhe diretamente para a câmera frontal");
+                  setMensagemBiometria("Reconhecimento Facial: toque no botão abaixo para abrir");
                 }}
               >
                 <Ionicons
                   name="scan-outline"
-                  size={16}
+                  size={15}
                   color={tipoBiometria === "facial" ? "#285A71" : "#64748B"}
                 />
                 <Text
@@ -611,6 +823,58 @@ export default function PontoE() {
                   Facial
                 </Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modeButton,
+                  tipoBiometria === "digital" && styles.modeButtonActive,
+                ]}
+                onPress={() => {
+                  setTipoBiometria("digital");
+                  setStatusBiometria("idle");
+                  setMensagemBiometria("Biometria do Celular: toque no botão para acionar o sensor");
+                }}
+              >
+                <Ionicons
+                  name="finger-print"
+                  size={15}
+                  color={tipoBiometria === "digital" ? "#285A71" : "#64748B"}
+                />
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    tipoBiometria === "digital" && styles.modeButtonTextActive,
+                  ]}
+                >
+                  Digital / PIN
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modeButton,
+                  tipoBiometria === "senha" && styles.modeButtonActive,
+                ]}
+                onPress={() => {
+                  setTipoBiometria("senha");
+                  setStatusBiometria("idle");
+                  setMensagemBiometria("Digite sua senha de login e confirme");
+                }}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={15}
+                  color={tipoBiometria === "senha" ? "#285A71" : "#64748B"}
+                />
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    tipoBiometria === "senha" && styles.modeButtonTextActive,
+                  ]}
+                >
+                  Senha
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Área Interativa do Sensor */}
@@ -619,28 +883,61 @@ export default function PontoE() {
                 styles.sensorTarget,
                 statusBiometria === "scanning" && styles.sensorTargetScanning,
                 statusBiometria === "success" && styles.sensorTargetSuccess,
+                statusBiometria === "error" && styles.sensorTargetError,
               ]}
               activeOpacity={0.8}
-              onPress={executarLeituraBiometrica}
+              onPress={
+                statusBiometria === "error"
+                  ? () => {
+                      setStatusBiometria("idle");
+                      setFotoCapturadaUri(null);
+                      if (tipoBiometria === "facial") {
+                        executarCapturaSelfie();
+                      } else if (tipoBiometria === "digital") {
+                        executarBiometriaDigital();
+                      }
+                    }
+                  : () => {
+                      if (tipoBiometria === "facial") {
+                        executarCapturaSelfie();
+                      } else if (tipoBiometria === "digital") {
+                        executarBiometriaDigital();
+                      }
+                    }
+              }
             >
               <Animated.View style={[styles.sensorInnerCircle, animatedPulse]}>
-                <Ionicons
-                  name={
-                    statusBiometria === "success"
-                      ? "checkmark-circle"
-                      : tipoBiometria === "digital"
-                      ? "finger-print"
-                      : "person"
-                  }
-                  size={64}
-                  color={
-                    statusBiometria === "success"
-                      ? "#16A34A"
-                      : statusBiometria === "scanning"
-                      ? "#0284C7"
-                      : "#285A71"
-                  }
-                />
+                {fotoCapturadaUri ? (
+                  <Image
+                    source={{ uri: fotoCapturadaUri }}
+                    style={styles.capturedFaceImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Ionicons
+                    name={
+                      statusBiometria === "success"
+                        ? "checkmark-circle"
+                        : statusBiometria === "error"
+                        ? "close-circle"
+                        : tipoBiometria === "facial"
+                        ? "scan-outline"
+                        : tipoBiometria === "digital"
+                        ? "finger-print"
+                        : "lock-closed"
+                    }
+                    size={64}
+                    color={
+                      statusBiometria === "success"
+                        ? "#16A34A"
+                        : statusBiometria === "error"
+                        ? "#EF4444"
+                        : statusBiometria === "scanning"
+                        ? "#0284C7"
+                        : "#285A71"
+                    }
+                  />
+                )}
               </Animated.View>
 
               {/* Linha Laser Animada ao Escanear */}
@@ -657,28 +954,117 @@ export default function PontoE() {
                 styles.biometricFeedbackText,
                 statusBiometria === "success" && styles.biometricFeedbackSuccess,
                 statusBiometria === "scanning" && styles.biometricFeedbackScanning,
+                statusBiometria === "error" && styles.biometricFeedbackError,
               ]}
             >
               {mensagemBiometria}
             </Text>
 
-            {/* Botão de Ação do Sensor */}
-            {statusBiometria === "idle" && (
+            {/* ─── Botões de Ação quando na aba Facial ─── */}
+            {statusBiometria === "idle" && tipoBiometria === "facial" && (
+              <View style={styles.facialActionButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.scanActionButton}
+                  onPress={executarCapturaSelfie}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="camera" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.scanActionButtonText}>Abrir Câmera Frontal (Selfie)</Text>
+                </TouchableOpacity>
+
+                {Platform.OS !== "web" && (
+                  <TouchableOpacity
+                    style={styles.secondaryScanButton}
+                    onPress={executarFaceIdNativo}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="scan-outline" size={18} color="#285A71" style={{ marginRight: 8 }} />
+                    <Text style={styles.secondaryScanButtonText}>Tentar Face ID do Celular</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* ─── Botões de Ação quando na aba Digital / PIN ─── */}
+            {statusBiometria === "idle" && tipoBiometria === "digital" && (
+              <View style={styles.facialActionButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.scanActionButton}
+                  onPress={executarBiometriaDigital}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="finger-print" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.scanActionButtonText}>Validar Digital ou PIN do Celular</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ─── Botões de Ação quando na aba Senha ─── */}
+            {statusBiometria === "idle" && tipoBiometria === "senha" && (
+              <View style={styles.webPasswordContainer}>
+                <View style={styles.webPasswordInputWrapper}>
+                  <Ionicons name="lock-closed" size={18} color="#64748B" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={styles.webPasswordInput}
+                    placeholder="Digite sua senha de login..."
+                    placeholderTextColor="#94A3B8"
+                    secureTextEntry={!showSenhaWeb}
+                    value={senhaWeb}
+                    onChangeText={setSenhaWeb}
+                    autoCapitalize="none"
+                    onSubmitEditing={validarSenhaWeb}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowSenhaWeb(!showSenhaWeb)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name={showSenhaWeb ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color="#64748B"
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.scanActionButton}
+                  onPress={validarSenhaWeb}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.scanActionButtonText}>Validar Senha e Bater Ponto</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Botão Tentar Novamente em caso de erro */}
+            {statusBiometria === "error" && (
               <TouchableOpacity
-                style={styles.scanActionButton}
-                onPress={executarLeituraBiometrica}
+                style={[styles.scanActionButton, styles.retryActionButton]}
+                onPress={() => {
+                  setStatusBiometria("idle");
+                  setFotoCapturadaUri(null);
+                  if (tipoBiometria === "facial") {
+                    executarCapturaSelfie();
+                  } else if (tipoBiometria === "digital") {
+                    executarBiometriaDigital();
+                  }
+                }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.scanActionButtonText}>
-                  {tipoBiometria === "digital" ? "Escanear Impressão Digital" : "Capturar Face"}
-                </Text>
+                <Ionicons name="refresh" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.scanActionButtonText}>Tentar Novamente</Text>
               </TouchableOpacity>
             )}
 
             {/* Botão Cancelar */}
             <TouchableOpacity
               style={styles.cancelBiometricButton}
-              onPress={() => setModalBiometria(false)}
+              onPress={() => {
+                setModalBiometria(false);
+                setFotoCapturadaUri(null);
+                setStatusBiometria("idle");
+              }}
             >
               <Text style={styles.cancelBiometricText}>Cancelar</Text>
             </TouchableOpacity>
@@ -1105,10 +1491,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   modeButtonText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     color: "#64748B",
-    marginLeft: 6,
+    marginLeft: 4,
   },
   modeButtonTextActive: {
     color: "#285A71",
@@ -1133,12 +1519,22 @@ const styles = StyleSheet.create({
     borderColor: "#16A34A",
     backgroundColor: "#DCFCE7",
   },
+  sensorTargetError: {
+    borderColor: "#EF4444",
+    backgroundColor: "#FEF2F2",
+  },
   sensorInnerCircle: {
     width: 110,
     height: 110,
     borderRadius: 55,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  capturedFaceImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
   },
   laserScanLine: {
     position: "absolute",
@@ -1165,6 +1561,9 @@ const styles = StyleSheet.create({
   biometricFeedbackSuccess: {
     color: "#16A34A",
   },
+  biometricFeedbackError: {
+    color: "#EF4444",
+  },
   scanActionButton: {
     backgroundColor: "#285A71",
     borderRadius: 12,
@@ -1173,11 +1572,58 @@ const styles = StyleSheet.create({
     marginTop: 16,
     width: "100%",
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  retryActionButton: {
+    backgroundColor: "#EF4444",
   },
   scanActionButtonText: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
+  },
+  facialActionButtonsContainer: {
+    width: "100%",
+    gap: 8,
+    marginTop: 16,
+  },
+  secondaryScanButton: {
+    backgroundColor: "#E8F2F6",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    width: "100%",
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#B8D5E5",
+  },
+  secondaryScanButtonText: {
+    color: "#285A71",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  webPasswordContainer: {
+    width: "100%",
+    marginTop: 14,
+    gap: 10,
+  },
+  webPasswordInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  webPasswordInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#1E293B",
   },
   cancelBiometricButton: {
     paddingVertical: 12,

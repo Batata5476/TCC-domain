@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import PerfilHeader from "../components/perfil/perfilHeader";
 import PerfilMeetingModal from "../components/perfil/PerfilMeetingModal";
 import PerfilMedicalModal from "../components/perfil/PerfilMedicalModal";
@@ -214,26 +215,34 @@ export function Emotions() {
         </View>
 
         {/* Card Histórico Médico */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            Histórico Médico
-          </Text>
-
-          <Text style={styles.cardContent}>
-            Card Content
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => setOccurrenceModalVisible(true)}
+          activeOpacity={0.7}
+        >
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.cardTitle}>Histórico Médico</Text>
+            <Text style={styles.cardContent}>
+              Consulte seu histórico de saúde, licenças e afastamentos registrados.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#285A71" />
+        </TouchableOpacity>
 
         {/* Card Atestados Médicos */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            Atestados Médicos
-          </Text>
-
-          <Text style={styles.cardContent}>
-            Card Content
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => setOccurrenceModalVisible(true)}
+          activeOpacity={0.7}
+        >
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.cardTitle}>Atestados Médicos</Text>
+            <Text style={styles.cardContent}>
+              Envie atestados médicos e acompanhe o status de validação junto ao RH.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#285A71" />
+        </TouchableOpacity>
 
         {/* Ferramentas do perfil */}
         <View style={styles.actionsContainer}>
@@ -369,11 +378,20 @@ const styles = StyleSheet.create({
 
   card: {
     marginHorizontal: 20,
-    marginTop: 25,
-    padding: 20,
-    borderRadius: 12,
+    marginTop: 20,
+    padding: 18,
+    borderRadius: 14,
     backgroundColor: "#FFFFFF",
-    elevation: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
 
   cardTitle: {

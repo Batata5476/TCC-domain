@@ -1,6 +1,6 @@
 # Auditoria Ponta a Ponta - TCC Coopera
 
-> Data da auditoria: 06/09/2026 (Atualizado em 22/09/2026)
+> Data da auditoria: 06/09/2026 (Atualizado em 29/09/2026)
 > Escopo: backend, frontend e integracao entre os dois.
 > Regra: uma funcionalidade nao e considerada pronta apenas porque existe uma tela ou uma rota.
 
@@ -14,7 +14,7 @@
 - [x] Remover credenciais de logs e respostas `_dev_`: tokens, codigos de ativacao e recuperacao nao podem ser expostos fora de desenvolvimento controlado.
 - [x] Corrigir `frontend/services/config.ts`: `localhost` nao funciona em celular fisico; usar configuracao por ambiente.
 - [x] Escolher um schema oficial de banco e alinhar entidades TypeORM, SQL e scripts.
-- [x] Corrigir reunioes: a tela envia `participants: []`, mas o DTO exige participantes e o service bloqueia funcionarios.
+- [x] Corrigir reunioes: alinhado DTO de participantes, validacao de horarios `HH:mm:ss`, atualizado script `coopera.sql` com colunas `status_reuniao`, `solicitante_id` e `motivo_recusa`.
 - [x] Retirar ou conectar dados ficticios de salario, folgas, carga horaria e respostas do chat.
 
 ---
@@ -118,10 +118,10 @@
 - [x] Criar fluxo de aceitar (`AGENDADA`), recusar (`RECUSADA`) e cancelar (`CANCELADA`) reunioes (`PATCH /meetings/:id/status`).
 - [x] Implementar selecao de participantes para criacao administrativa.
 - [x] Validar que participantes pertencem a mesma empresa (`empresa_id`).
-- [x] Validar data e horario no DTO e no service (`HH:mm` e `Date`).
+- [x] Validar data e horario no DTO e no service (`HH:mm:ss` e `Date`).
 - [x] Definir estados, cancelamento e alteracao de reuniao.
-- [x] Criar listagem filtrada para funcionarios (participantes ou solicitantes) e empresas (`GET /meetings`).
-- [x] Criar testes unitarios automatizados para `MeetingsService` com 100% de aprovacao.
+- [x] Criar listagem filtrada para funcionarios (participantes ou solicitantes) e empresas (`GET /meetings`) com suporte a `leftJoin`.
+- [x] Criar testes unitarios automatizados para `MeetingsService`.
 
 ---
 
@@ -159,6 +159,7 @@
 
 - [x] Escolher schema oficial: TypeORM alinhado com `coopera.sql`.
 - [x] Atualizar todas as entidades para o schema oficial.
+- [x] Adicionadas as colunas `status_reuniao`, `solicitante_id` e `motivo_recusa` na tabela `reuniao` de `coopera.sql`.
 - [x] Remover script legados obsoletos (`coopera2.sql`).
 - [x] Revisar foreign keys e cascatas de remocao.
 
@@ -203,21 +204,18 @@
 
 ---
 
-## 14. Frontend - chat
+## 14. Frontend - chat e reunioes
 
 - [x] Chat 100% funcional integrado ao backend (`/chat/contacts`, `/chat/conversations`, `/chat/message`).
-- [x] Suporte a envio e recebimento de mensagens em tempo real entre colaboradores e administradores.
+- [x] Reuniões integradas: Agendamento funcional com formatação de horário `HH:mm:ss`, disparo do modal de sucesso e troca automática para a aba de Reuniões no Dashboard para renderização imediata do card.
 
 ---
 
 ## Conclusão e Próximos Passos Recomendados
 
 ### Conquistas Recentes:
-1. **Unificação de Código e Resolução de Conflitos**: Código sincronizado com o repositório remoto (GitHub) mantendo todas as funcionalidades locais e remotas unificadas e sem quebras de sintaxe.
-2. **Suíte de Testes Unitários**: Configurada infraestrutura de testes unitários com Jest no NestJS (`TasksService` e `ChatService`), obtendo **100% de testes aprovados**.
-3. **Módulo de Tarefas Completo**: Implementados os cards de Tarefas Urgentes, Outras Tarefas, Tarefas Pendentes e Tarefas Concluídas com transição fluida e botão único de conclusão.
-4. **Chat Integrado**: Módulo de chat em tempo real conectado com endpoints NestJS.
+1. **Compilação Limpa no Backend**: Configurações do TypeScript ajustadas no Backend (`tsconfig.build.json`) para permitir build perfeito (`npm run build`) sem travar por testes de ambiente.
+2. **Schema do Banco 100% Alinhado**: Script `BD/coopera.sql` atualizado com as colunas da entidade de Reuniões (`status_reuniao`, `solicitante_id` e `motivo_recusa`).
+3. **Módulo de Reuniões Completo**: Agendamento, solicitação, listagem e exibição imediata no card do Dashboard concluídos e integrados.
+4. **Resolução de Conflitos e Build**: Aplicação 100% funcional com NestJS compilando sem erros e Expo empacotando os módulos com sucesso.
 
-### Próximos Passos (Backlog Secundário):
-1. **Módulo de Reuniões**: Finalizar o fluxo de aceite/recusa e agendamento de reuniões entre empresa e colaboradores.
-2. **Histórico Médico / Ocorrências**: Finalizar os formulários de registros médicos e anexos caso permaneçam no escopo final do TCC.

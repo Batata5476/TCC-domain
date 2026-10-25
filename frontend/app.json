@@ -15,6 +15,12 @@
           "locationWhenInUsePermission": "Permita que o Ponto-E use sua localização para registrar a jornada."
         }
       ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permita que o Coopera utilize o Face ID para autenticar o registro de ponto."
+        }
+      ],
       "expo-status-bar",
       "expo-font"
     ]
