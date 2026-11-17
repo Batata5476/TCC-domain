@@ -10,6 +10,7 @@
     "backend": "npm --prefix Backend run start:dev",
     "frontend": "npm --prefix frontend run start",
     "web": "npm --prefix frontend run web",
+    "build": "cd frontend && npm install && npx expo export --platform web",
     "test": "npm --prefix Backend test && node tests/run_all.mjs"
   }
 }
