@@ -60,7 +60,7 @@ export default function DadosTrabalhistas() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace("/dashboard")}
         >
           <Ionicons name="arrow-back" size={22} color="#1C1B1F" />
         </TouchableOpacity>

@@ -219,7 +219,7 @@ export default function PerfilFunc() {
             <PerfilAction
               icon="checkbox-outline"
               text="ver minhas tarefas"
-              onPress={() => router.push("/dashboard")}
+              onPress={() => router.replace("/dashboard")}
               showAdd={false}
             />
           </>

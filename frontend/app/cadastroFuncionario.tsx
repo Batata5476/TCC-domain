@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -22,8 +22,27 @@ export default function CadastroFuncionario() {
   const [email, setEmail] = useState("");
   const [cargo, setCargo] = useState("");
   const [setorId, setSetorId] = useState("");
+  const [sectors, setSectors] = useState<{ id: number; nome: string }[]>([]);
   const [roleName, setRoleName] = useState("Funcionário"); // 'Funcionário' ou 'Administrador'
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authenticatedFetch("/company/sectors");
+        if (res.ok) {
+          const body = await res.json();
+          const list = body.data ?? [];
+          setSectors(list);
+          if (list.length > 0 && !setorId) {
+            setSetorId(String(list[0].id));
+          }
+        }
+      } catch {
+        // Ignora silenciosamente caso não consiga carregar setores
+      }
+    })();
+  }, []);
 
   // Estado do FeedbackModal
   const [feedback, setFeedback] = useState<{
@@ -169,14 +188,37 @@ export default function CadastroFuncionario() {
           onChangeText={setCargo}
         />
 
-        <Text style={styles.label}>ID do Setor (Número) *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Ex: 95"
-          keyboardType="numeric"
-          value={setorId}
-          onChangeText={setSetorId}
-        />
+        <Text style={styles.label}>Setor *</Text>
+        {sectors.length > 0 ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            {sectors.map((sec) => {
+              const isSelected = String(sec.id) === String(setorId);
+              return (
+                <TouchableOpacity
+                  key={sec.id}
+                  style={[
+                    styles.roleBtn,
+                    { flex: 0, paddingHorizontal: 14, paddingVertical: 10 },
+                    isSelected && styles.roleBtnActive,
+                  ]}
+                  onPress={() => setSetorId(String(sec.id))}
+                >
+                  <Text style={[styles.roleText, isSelected && styles.roleTextActive]}>
+                    {sec.nome} (#{sec.id})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          <TextInput
+            style={styles.input}
+            placeholder="ID do Setor (Ex: 1)"
+            keyboardType="numeric"
+            value={setorId}
+            onChangeText={setSetorId}
+          />
+        )}
 
         <Text style={styles.label}>Tipo de Perfil *</Text>
         <View style={styles.roleContainer}>

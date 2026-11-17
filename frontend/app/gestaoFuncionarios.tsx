@@ -32,7 +32,7 @@ type Employee = {
   telefone?: string;
   pontos_acumulados?: number;
   role?: { id: number; nome: string };
-  setor?: { id: number; nome_setor: string };
+  setor?: { id: number; nome?: string; nome_setor?: string };
 };
 
 type Occurrence = {
@@ -132,7 +132,8 @@ export default function GestaoFuncionariosScreen() {
       const nameMatch = emp.nome?.toLowerCase().includes(q);
       const emailMatch = emp.email?.toLowerCase().includes(q);
       const cargoMatch = emp.cargo?.toLowerCase().includes(q);
-      const setorMatch = emp.setor?.nome_setor?.toLowerCase().includes(q);
+      const setorName = emp.setor?.nome || emp.setor?.nome_setor;
+      const setorMatch = setorName?.toLowerCase().includes(q);
       const cpfMatch = emp.cpf?.includes(q);
 
       return nameMatch || emailMatch || cargoMatch || setorMatch || cpfMatch;
@@ -253,7 +254,7 @@ export default function GestaoFuncionariosScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.back()}
+            onPress={() => router.replace("/dashboard")}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={22} color="#285A71" />
@@ -426,7 +427,9 @@ export default function GestaoFuncionariosScreen() {
                         </Text>
                         <Text style={styles.employeeRole} numberOfLines={1}>
                           {emp.cargo || emp.role?.nome || "Colaborador"}
-                          {emp.setor?.nome_setor ? ` • ${emp.setor.nome_setor}` : ""}
+                          {emp.setor?.nome || emp.setor?.nome_setor
+                            ? ` • ${emp.setor?.nome || emp.setor?.nome_setor}`
+                            : ""}
                         </Text>
                       </View>
                     </View>
@@ -626,7 +629,7 @@ export default function GestaoFuncionariosScreen() {
                         <Ionicons name="business-outline" size={16} color="#285A71" />
                         <Text style={styles.infoItemLabel}>Setor:</Text>
                         <Text style={styles.infoItemValue}>
-                          {selectedEmployee.setor?.nome_setor || "Geral"}
+                          {selectedEmployee.setor?.nome || selectedEmployee.setor?.nome_setor || "Geral"}
                         </Text>
                       </View>
 

@@ -179,11 +179,14 @@ export class WorkService {
   }
 
   async update(id: number, updateDto: UpdateWorkDto, caller: any) {
-    if (!isEmployeeRole(caller.role)) {
-      throw new ForbiddenException(`Apenas funcionarios podem atualizar seus registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
+    if (caller.role === ROLES.MASTER_ADMIN) {
+      throw new ForbiddenException(`Apenas colaboradores podem atualizar seus registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
     }
 
     const work = await this.validateWorkAccess(id, caller);
+    if (work.fk_id_func !== caller.sub) {
+      throw new ForbiddenException('Voce so pode atualizar seus proprios registros de ponto');
+    }
 
     if (updateDto.saida !== undefined) {
       // Para registrar a saída, exige e valida novamente a posição atual do funcionário.
@@ -218,11 +221,14 @@ export class WorkService {
   }
 
   async remove(id: number, caller: any) {
-    if (!isEmployeeRole(caller.role)) {
-      throw new ForbiddenException(`Apenas funcionarios podem excluir seus registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
+    if (caller.role === ROLES.MASTER_ADMIN) {
+      throw new ForbiddenException(`Apenas colaboradores podem excluir seus registros de ponto (perfil recebido: ${caller.role ?? 'nao informado'})`);
     }
 
     const work = await this.validateWorkAccess(id, caller);
+    if (work.fk_id_func !== caller.sub) {
+      throw new ForbiddenException('Voce so pode excluir seus proprios registros de ponto');
+    }
 
     await this.workRepository.remove(work);
 

@@ -19,6 +19,19 @@ export class CompanyController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Get('sectors')
+  findSectors(@Request() req) {
+    return this.companyService.findAllSectors(req.user.empresa_id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(...ADMIN_ROLES)
+  @Post('sectors')
+  createSector(@Body('nome') nome: string, @Request() req) {
+    return this.companyService.createSector(nome, req.user.empresa_id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
   @Permissions('company.read')
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req) {
